@@ -13,6 +13,7 @@ design.md
 phases.md
 rules.md
 memory.md
+CLAUDE.md
 
 # Secrets and environment files: never commit
 .env
