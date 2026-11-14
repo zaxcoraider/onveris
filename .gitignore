@@ -13,3 +13,36 @@ design.md
 phases.md
 rules.md
 memory.md
+
+# Secrets and environment files: never commit
+.env
+.env.*
+*.env
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+keystore/
+secrets/
+secret.*
+secrets.*
+credentials*
+*.secret
+mnemonic*
+.npmrc
+
+# Wallet and contract tooling output (may embed keys or RPC URLs with keys)
+broadcast/
+cache/
+artifacts/
+out/
+.foundry/
+hardhat.config.local.*
+
+# Local tool and editor state
+.mcp.json
+.forge/
+.vscode/
+.idea/
