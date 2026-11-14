@@ -1,0 +1,15 @@
+# Local tooling installed by `forge skills install`; reinstall instead of committing
+.claude/
+
+node_modules/
+.DS_Store
+*.log
+
+# Planning and hackathon notes: kept on this machine only, never pushed
+HACKATHON.md
+prd.md
+architecture.md
+design.md
+phases.md
+rules.md
+memory.md
