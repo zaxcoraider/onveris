@@ -1,34 +1,38 @@
 import { graph } from '@forge/teamwork-graph';
-import { CHAINS } from '../services/chains.js';
-import { readContract } from '../services/reader.js';
+import { getRegistry } from '../services/registry.js';
 
-// Phase 0 feasibility test: put one well-known public contract into the Teamwork Graph
-// so we can see whether it becomes searchable in Rovo. The registry will replace this list.
-const TEST_CONTRACTS = [
-  { chain: 'ethereum', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', name: 'USDC' },
-];
+// Teamwork Graph connector. When a site admin connects it, every registered contract is sent
+// to the graph as a document, so it can turn up in Rovo Search and Rovo Chat. The values are
+// those from Onveris's last check, so connecting reads nothing from the chain.
+//
+// Not yet built: sending updates when contracts are registered, removed or change. Until
+// then the graph holds the registry as it was when the connection was made.
 
-function toGraphObject(contract, state) {
-  const chain = CHAINS[contract.chain];
+const STATUS_WORDS = { in_sync: 'in sync with its record', drift: 'differs from its record', unreachable: 'unreachable at the last check' };
+
+function toGraphObject(contract) {
+  const { observed } = contract;
   const lines = [
-    `${contract.name} smart contract on ${chain.name}.`,
-    `Address: ${state.address}`,
-    `Type: ${state.kind === 'proxy' ? 'upgradeable proxy' : 'plain contract'}`,
-    state.implementation && `Implementation: ${state.implementation}`,
-    state.admin && `Proxy admin: ${state.admin}`,
-    state.owner && `Owner: ${state.owner}`,
-    `Code fingerprint: ${state.codeHash}`,
-    `Read from the chain at block ${state.blockNumber}.`,
+    `${contract.name}: smart contract on ${contract.chainName}, registered in Onveris.`,
+    `Address: ${contract.address}`,
+    `Type: ${contract.kind === 'proxy' ? 'upgradeable proxy' : 'plain contract'}`,
+    `Status: ${STATUS_WORDS[contract.status] || contract.status}`,
+    observed.implementation && `Implementation: ${observed.implementation}`,
+    observed.admin && `Proxy admin: ${observed.admin}`,
+    observed.beacon && `Beacon: ${observed.beacon}`,
+    observed.owner && `Owner: ${observed.owner}`,
+    observed.codeHash && `Code fingerprint: ${observed.codeHash}`,
+    contract.lastBlock && `Last checked at block ${contract.lastBlock}.`,
   ].filter(Boolean);
 
   return {
     schemaVersion: '1.0',
-    id: `${contract.chain}:${state.address}`,
-    updateSequenceNumber: state.blockNumber,
-    displayName: `${contract.name} contract on ${chain.name}`,
-    url: `${chain.explorer}/address/${state.address}`,
-    createdAt: state.readAt,
-    lastUpdatedAt: state.readAt,
+    id: contract.id,
+    updateSequenceNumber: contract.lastBlock || 1,
+    displayName: `${contract.name} contract on ${contract.chainName}`,
+    url: contract.explorerUrl,
+    createdAt: contract.createdAt,
+    lastUpdatedAt: contract.lastCheckedAt || contract.createdAt,
     // Everything here is public blockchain data, so it is visible to everyone on the site.
     permissions: [{ accessControls: [{ principals: [{ type: 'EVERYONE' }] }] }],
     'atlassian:document': {
@@ -45,26 +49,19 @@ export async function onConnectionChangeHandler(request) {
   // Atlassian removes ingested objects itself when a connection is deleted.
   if (action === 'DELETED') return { success: true };
 
-  const objects = [];
-  for (const contract of TEST_CONTRACTS) {
-    try {
-      const state = await readContract(contract.chain, contract.address);
-      if (state.kind !== 'none') objects.push(toGraphObject(contract, state));
-    } catch (error) {
-      console.warn(`[connector] could not read ${contract.name}: ${error.message}`);
-    }
-  }
-  if (objects.length === 0) {
-    return { success: false, message: 'Could not read any contracts from the chain. Try connecting again.' };
+  const { contracts } = await getRegistry();
+  if (contracts.length === 0) {
+    console.log('[connector] no contracts registered yet; nothing to send');
+    return { success: true };
   }
 
-  const response = await graph.setObjects({ connectionId, objects });
+  const response = await graph.setObjects({ connectionId, objects: contracts.map(toGraphObject) });
   const rejected = response.results?.rejected ?? [];
   const accepted = response.results?.accepted?.length ?? 0;
   if (!response.success || rejected.length > 0) {
     console.error('[connector] setObjects failed', JSON.stringify({ accepted, rejected, error: response.error }));
     return { success: false, message: 'Teamwork Graph did not accept the contract data.' };
   }
-  console.log(`[connector] ${accepted || objects.length} accepted, 0 rejected`);
+  console.log(`[connector] ${accepted || contracts.length} accepted, 0 rejected`);
   return { success: true };
 }
