@@ -1,6 +1,6 @@
 # Onveris: developer guide
 
-The Forge app behind Onveris. For what it does and how to try it, see the [project README](../README.md).
+The Forge app behind Onveris. For what it does and how to try it, see the [README](README.md).
 
 ## Setup
 

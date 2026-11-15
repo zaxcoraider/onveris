@@ -77,7 +77,7 @@ Atlassian Forge, UI Kit, Forge key-value storage, scheduled triggers, Jira REST 
 
 ## In this repository
 
-- [`onveris/`](onveris/) is the Forge app. Its [README](onveris/README.md) covers setup, modules, permissions, tests and the code layout.
+This repository is the Forge app itself: [`manifest.yml`](manifest.yml), [`src/`](src/) and [`test/`](test/). [DEVELOPMENT.md](DEVELOPMENT.md) covers setup, modules, permissions, tests and the code layout.
 
 ## Status
 

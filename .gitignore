@@ -1,9 +1,24 @@
-# Local tooling installed by `forge skills install`; reinstall instead of committing
-.claude/
-
+# Dependencies and build output
 node_modules/
-.DS_Store
+dist/
+
+# Forge CLI state
+/.forge/
+
+# Logs
 *.log
+npm-debug.log*
+
+# Editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local tools for AI coding assistants: reinstall instead of committing
+.claude/
+.mcp.json
+AGENTS.md
 
 # Planning and hackathon notes: kept on this machine only, never pushed
 HACKATHON.md
@@ -41,9 +56,3 @@ artifacts/
 out/
 .foundry/
 hardhat.config.local.*
-
-# Local tool and editor state
-.mcp.json
-.forge/
-.vscode/
-.idea/
