@@ -6,6 +6,26 @@ modules:
         function: resolver
       render: native
       title: Onveris
+  jira:issuePanel:
+    - key: onveris-issue-panel
+      resource: issue-panel
+      resolver:
+        function: resolver
+      render: native
+      title: Onveris
+      icon: resource:icons;onveris-light.svg
+  jira:adminPage:
+    - key: onveris-settings
+      resource: settings
+      resolver:
+        function: adminResolver
+      render: native
+      title: Onveris
+      icon: resource:icons;onveris-light.svg
+  scheduledTrigger:
+    - key: onveris-checker
+      function: scheduledCheck
+      interval: fiveMinute
   rovo:agent:
     - key: onveris-agent
       name: Onveris
@@ -74,6 +94,11 @@ modules:
   function:
     - key: resolver
       handler: index.handler
+    - key: adminResolver
+      handler: index.adminHandler
+    - key: scheduledCheck
+      handler: index.scheduledCheck
+      timeoutSeconds: 300
     - key: onConnectionChange
       handler: index.onConnectionChangeHandler
     - key: readContractAction
@@ -81,6 +106,10 @@ modules:
 resources:
   - key: main
     path: src/frontend/index.jsx
+  - key: issue-panel
+    path: src/frontend/issue-panel.jsx
+  - key: settings
+    path: src/frontend/settings.jsx
   - key: icons
     path: static/icons
 permissions:
@@ -89,6 +118,10 @@ permissions:
     - write:object:jira
     - delete:object:jira
     - storage:app
+    # Read the issues linked to a contract, as the current user.
+    - read:jira-work
+    # Create an issue when a contract changes with nothing to explain it.
+    - write:jira-work
   external:
     fetch:
       backend:

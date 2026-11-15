@@ -9,6 +9,7 @@ import ForgeReconciler, {
   Inline,
   Label,
   Link,
+  LoadingButton,
   Lozenge,
   Modal,
   ModalBody,
@@ -22,53 +23,87 @@ import ForgeReconciler, {
   Stack,
   Text,
   Textfield,
+  xcss,
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
+import { CHANGE_STATUS, KIND_LABEL, STATUS, StatusLozenge, call, shorten, timeAgo } from './shared.jsx';
 
-const STATUS = {
-  in_sync: { label: 'In sync', appearance: 'success' },
-  drift: { label: 'Drift', appearance: 'removed' },
-  unreachable: { label: 'Unreachable', appearance: 'default' },
-};
+const filterBox = xcss({ width: '220px' });
+const STATUS_OPTIONS = Object.entries(STATUS).map(([value, { label }]) => ({ label, value }));
 
-const KIND_LABEL = { proxy: 'Upgradeable proxy', plain: 'Plain contract' };
-
-const shorten = (address) => (address ? `${address.slice(0, 6)}…${address.slice(-4)}` : '');
-
-const timeAgo = (iso) => {
-  if (!iso) return 'never';
-  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-  if (seconds < 60) return 'just now';
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} hr ago`;
-  return `${Math.round(hours / 24)} days ago`;
-};
-
-const StatusLozenge = ({ status }) => {
-  const { label, appearance } = STATUS[status] || STATUS.unreachable;
-  return <Lozenge appearance={appearance}>{label}</Lozenge>;
-};
-
-const GENERIC_ERROR = { ok: false, message: 'Something went wrong. Try again.' };
-const call = (name, payload) => invoke(name, payload).catch(() => GENERIC_ERROR);
-
-const RegisterModal = ({ chains, onClose, onRegistered }) => {
+const RegisterModal = ({ chains, fields, onClose, onRegistered }) => {
   const [chain, setChain] = useState(chains[0] || null);
   const [address, setAddress] = useState('');
   const [name, setName] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
-  const submit = async () => {
-    setSaving(true);
+  const input = { chain: chain?.value, address, name };
+
+  // Step one reads the chain and shows what was found. Nothing is saved yet.
+  const read = async () => {
+    setBusy(true);
     setError(null);
-    const result = await call('registerContract', { chain: chain?.value, address, name });
-    setSaving(false);
+    const result = await call('previewContract', input);
+    setBusy(false);
+    if (result.ok) setPreview(result.preview);
+    else setError(result.message);
+  };
+
+  // Step two saves it. The chain is read again, so the record is as fresh as possible.
+  const confirm = async () => {
+    setBusy(true);
+    setError(null);
+    const result = await call('registerContract', input);
+    setBusy(false);
     if (result.ok) onRegistered(result.contract);
     else setError(result.message);
   };
+
+  const errorMessage = error && (
+    <SectionMessage appearance="error" title="Couldn't register this contract">
+      <Text>{error}</Text>
+    </SectionMessage>
+  );
+
+  if (preview) {
+    const found = fields.filter(({ key }) => preview.values[key]);
+    return (
+      <Modal onClose={onClose}>
+        <ModalHeader>
+          <ModalTitle>Record {preview.name}?</ModalTitle>
+        </ModalHeader>
+        <ModalBody>
+          <Stack space="space.200">
+            <Text>
+              This is what Onveris read from {preview.chainName} at block {preview.blockNumber}. Confirm to save it as
+              the record. Later checks compare the chain against it.
+            </Text>
+            {errorMessage}
+            <Stack space="space.050">
+              <Text weight="bold">{KIND_LABEL[preview.kind] || 'Contract'}</Text>
+              <Text>{preview.address}</Text>
+            </Stack>
+            {found.map(({ key, label }) => (
+              <Stack key={key} space="space.050">
+                <Text weight="bold">{label}</Text>
+                <Text>{preview.values[key]}</Text>
+              </Stack>
+            ))}
+          </Stack>
+        </ModalBody>
+        <ModalFooter>
+          <Button appearance="subtle" onClick={() => setPreview(null)} isDisabled={busy}>
+            Back
+          </Button>
+          <LoadingButton appearance="primary" onClick={confirm} isLoading={busy}>
+            Confirm and register
+          </LoadingButton>
+        </ModalFooter>
+      </Modal>
+    );
+  }
 
   return (
     <Modal onClose={onClose}>
@@ -78,14 +113,10 @@ const RegisterModal = ({ chains, onClose, onRegistered }) => {
       <ModalBody>
         <Stack space="space.200">
           <Text>
-            Onveris reads the contract from the chain and records what it finds. Later checks compare the chain
-            against that record.
+            Onveris reads the contract from the chain and shows you what it found before anything is saved. Read-only:
+            no wallet or keys.
           </Text>
-          {error && (
-            <SectionMessage appearance="error" title="Couldn't register this contract">
-              <Text>{error}</Text>
-            </SectionMessage>
-          )}
+          {errorMessage}
           <Box>
             <Label labelFor="register-chain">Chain</Label>
             <Select inputId="register-chain" options={chains} value={chain} onChange={setChain} />
@@ -111,17 +142,17 @@ const RegisterModal = ({ chains, onClose, onRegistered }) => {
         </Stack>
       </ModalBody>
       <ModalFooter>
-        <Button appearance="subtle" onClick={onClose} isDisabled={saving}>
+        <Button appearance="subtle" onClick={onClose} isDisabled={busy}>
           Cancel
         </Button>
-        <Button
+        <LoadingButton
           appearance="primary"
-          onClick={submit}
-          isLoading={saving}
+          onClick={read}
+          isLoading={busy}
           isDisabled={!chain || !address.trim() || !name.trim()}
         >
-          Read and register
-        </Button>
+          Read from chain
+        </LoadingButton>
       </ModalFooter>
     </Modal>
   );
@@ -161,25 +192,321 @@ const RemoveModal = ({ contract, onClose, onRemoved }) => {
         <Button appearance="subtle" onClick={onClose} isDisabled={removing}>
           Cancel
         </Button>
-        <Button appearance="danger" onClick={remove} isLoading={removing}>
+        <LoadingButton appearance="danger" onClick={remove} isLoading={removing}>
           Remove
-        </Button>
+        </LoadingButton>
       </ModalFooter>
     </Modal>
   );
 };
 
+// Jira issues linked to a contract. The backend only returns issues the current user can view.
+const LinkedIssues = ({ contractId }) => {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [issueKey, setIssueKey] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const apply = (result) => {
+    if (result.ok) {
+      setData(result);
+      setError(null);
+    } else {
+      setError(result.message);
+    }
+    return result.ok;
+  };
+
+  const load = useCallback(async () => apply(await call('getContractIssues', { id: contractId })), [contractId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const run = async (name, payload) => {
+    setBusy(true);
+    const ok = apply(await call(name, { id: contractId, ...payload }));
+    setBusy(false);
+    return ok;
+  };
+
+  const link = async () => {
+    if (await run('linkIssueByKey', { issueKey })) setIssueKey('');
+  };
+
+  return (
+    <Stack space="space.150">
+      <Heading as="h2">Linked issues</Heading>
+      {error && (
+        <SectionMessage appearance="error">
+          <Text>{error}</Text>
+        </SectionMessage>
+      )}
+      {!data && !error && <Spinner size="small" label="Loading linked issues" />}
+      {!data && error && (
+        <Box>
+          <Button onClick={load}>Retry</Button>
+        </Box>
+      )}
+      {data && data.issues.length === 0 && data.hidden === 0 && (
+        <Text>No issues are linked to this contract yet. Link the tickets that plan or explain changes to it.</Text>
+      )}
+      {data &&
+        data.issues.map((issue) => (
+          <Inline key={issue.id} space="space.150" alignBlock="center" spread="space-between">
+            <Inline space="space.100" alignBlock="center">
+              <Text>
+                <Link href={`/browse/${issue.key}`} openNewTab>
+                  {issue.key}
+                </Link>{' '}
+                {issue.summary}
+              </Text>
+              {issue.status && <Lozenge>{issue.status}</Lozenge>}
+            </Inline>
+            <Button appearance="subtle" isDisabled={busy} onClick={() => run('unlinkIssue', { issueId: issue.id })}>
+              Unlink
+            </Button>
+          </Inline>
+        ))}
+      {data && data.hidden > 0 && (
+        <Text>
+          {data.hidden === 1
+            ? '1 more linked issue is not shown because you cannot view it.'
+            : `${data.hidden} more linked issues are not shown because you cannot view them.`}
+        </Text>
+      )}
+      {data && (
+        <Inline space="space.100" alignBlock="end">
+          <Box xcss={filterBox}>
+            <Label labelFor="link-issue-key">Issue key</Label>
+            <Textfield
+              id="link-issue-key"
+              placeholder="For example: OPS-12"
+              value={issueKey}
+              onChange={(e) => setIssueKey(e.target.value)}
+            />
+          </Box>
+          <LoadingButton onClick={link} isLoading={busy} isDisabled={!issueKey.trim()}>
+            Link issue
+          </LoadingButton>
+        </Inline>
+      )}
+    </Stack>
+  );
+};
+
+const IssueLink = ({ issue }) => (
+  <Link href={`/browse/${issue.key}`} openNewTab>
+    {issue.key}
+  </Link>
+);
+
+// Changes a recorded value by hand. The chain is checked against the new record straight away.
+const EditRecordModal = ({ contract, field, onClose, onSaved }) => {
+  const [value, setValue] = useState(contract.baseline[field.key] || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    const result = await call('editBaseline', { id: contract.id, field: field.key, value });
+    setSaving(false);
+    if (result.ok) onSaved(result);
+    else setError(result.message);
+  };
+
+  return (
+    <Modal onClose={onClose}>
+      <ModalHeader>
+        <ModalTitle>Edit recorded {field.label.toLowerCase()}</ModalTitle>
+      </ModalHeader>
+      <ModalBody>
+        <Stack space="space.200">
+          <Text>
+            The record is what Onveris expects to find on the chain. If you record a value that differs from the
+            chain, the contract shows as drift and the difference is raised as an unrecorded change.
+          </Text>
+          {error && (
+            <SectionMessage appearance="error">
+              <Text>{error}</Text>
+            </SectionMessage>
+          )}
+          <Box>
+            <Label labelFor="edit-record-value">Recorded value</Label>
+            <Textfield
+              id="edit-record-value"
+              placeholder="0x… or leave empty for none"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </Box>
+          <Text>On chain now: {contract.observed[field.key] || 'None'}</Text>
+        </Stack>
+      </ModalBody>
+      <ModalFooter>
+        <Button appearance="subtle" onClick={onClose} isDisabled={saving}>
+          Cancel
+        </Button>
+        <LoadingButton appearance="primary" onClick={save} isLoading={saving}>
+          Save and check
+        </LoadingButton>
+      </ModalFooter>
+    </Modal>
+  );
+};
+
+// Closes an open change, either by naming the issue that explains it or by accepting it with a note.
+const ReconcileModal = ({ change, mode, onClose, onDone }) => {
+  const [text, setText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const linking = mode === 'link';
+
+  const submit = async () => {
+    setSaving(true);
+    setError(null);
+    const result = linking
+      ? await call('reconcileWithIssue', { changeId: change.id, issueKey: text })
+      : await call('acknowledgeChange', { changeId: change.id, note: text });
+    setSaving(false);
+    if (result.ok) onDone(result);
+    else setError(result.message);
+  };
+
+  return (
+    <Modal onClose={onClose}>
+      <ModalHeader>
+        <ModalTitle>{linking ? 'Link this change to an issue' : 'Acknowledge this change'}</ModalTitle>
+      </ModalHeader>
+      <ModalBody>
+        <Stack space="space.200">
+          <Text>
+            {linking
+              ? 'Name the issue that explains this change. The record is then updated to match the chain.'
+              : 'Say briefly why this change is accepted. The record is then updated to match the chain.'}
+          </Text>
+          <Text>
+            {change.label}: {change.oldValue || 'None'} → {change.newValue || 'None'}
+          </Text>
+          {error && (
+            <SectionMessage appearance="error">
+              <Text>{error}</Text>
+            </SectionMessage>
+          )}
+          <Box>
+            <Label labelFor="reconcile-text">{linking ? 'Issue key' : 'Note'}</Label>
+            <Textfield
+              id="reconcile-text"
+              placeholder={linking ? 'For example: OPS-12' : 'For example: Emergency fix agreed in the incident call'}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+          </Box>
+        </Stack>
+      </ModalBody>
+      <ModalFooter>
+        <Button appearance="subtle" onClick={onClose} isDisabled={saving}>
+          Cancel
+        </Button>
+        <LoadingButton appearance="primary" onClick={submit} isLoading={saving} isDisabled={!text.trim()}>
+          {linking ? 'Link and update record' : 'Acknowledge and update record'}
+        </LoadingButton>
+      </ModalFooter>
+    </Modal>
+  );
+};
+
+const OpenChange = ({ change, onReconcile }) => (
+  <Stack space="space.100">
+    <Inline space="space.100" alignBlock="center" shouldWrap>
+      <Text weight="bold">{change.label} changed</Text>
+      <Lozenge appearance="removed">Unrecorded</Lozenge>
+      <Text color="color.text.subtle">
+        detected {timeAgo(change.detectedAt)}
+        {change.blockNumber ? ` at block ${change.blockNumber}` : ''}
+      </Text>
+    </Inline>
+    <Text>Recorded: {change.oldValue || 'None'}</Text>
+    <Text>On chain: {change.newValue || 'None'}</Text>
+    {change.driftIssue && (
+      <Text>
+        Raised as <IssueLink issue={change.driftIssue} /> {change.driftIssue.summary}
+      </Text>
+    )}
+    {change.issueFailed && !change.driftIssue && (
+      <Text color="color.text.danger">
+        Onveris couldn't create a Jira issue for this change. It will try again on the next check. A Jira admin can
+        review the project chosen in the Onveris settings.
+      </Text>
+    )}
+    <ButtonGroup>
+      <Button onClick={() => onReconcile(change, 'link')}>Link to issue</Button>
+      <Button onClick={() => onReconcile(change, 'acknowledge')}>Acknowledge</Button>
+    </ButtonGroup>
+  </Stack>
+);
+
+const historyRows = (history) =>
+  history.map((change) => {
+    const { label, appearance } = CHANGE_STATUS[change.status] || CHANGE_STATUS.cleared;
+    return {
+      key: change.id,
+      cells: [
+        { key: 'when', content: <Text>{timeAgo(change.detectedAt)}</Text> },
+        { key: 'field', content: <Text>{change.label}</Text> },
+        {
+          key: 'values',
+          content: (
+            <Text>
+              {shorten(change.oldValue) || 'None'} → {shorten(change.newValue) || 'None'}
+            </Text>
+          ),
+        },
+        { key: 'status', content: <Lozenge appearance={appearance}>{label}</Lozenge> },
+        {
+          key: 'explained',
+          content: change.resolutionIssue ? (
+            <Text>
+              <IssueLink issue={change.resolutionIssue} /> {change.resolutionIssue.summary}
+            </Text>
+          ) : (
+            <Text>{change.note || (change.status === 'cleared' ? 'The chain matches the record again' : '')}</Text>
+          ),
+        },
+      ],
+    };
+  });
+
 const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [changes, setChanges] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [reconciling, setReconciling] = useState(null);
+  const [linksVersion, setLinksVersion] = useState(0);
+
+  // Every action that touches the contract answers with the contract and its changes together.
+  const applyResult = (result) => {
+    onUpdated(result.contract);
+    setChanges(result.changes);
+    setLinksVersion((version) => version + 1);
+  };
+
+  useEffect(() => {
+    call('getContractChanges', { id: contract.id }).then((result) => {
+      if (result.ok) setChanges(result.changes);
+      else setError(result.message);
+    });
+  }, [contract.id]);
 
   const check = async () => {
     setChecking(true);
     setError(null);
     const result = await call('checkContract', { id: contract.id });
     setChecking(false);
-    if (result.ok) onUpdated(result.contract);
+    if (result.ok) applyResult(result);
     else setError(result.message);
   };
 
@@ -198,6 +525,14 @@ const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
           {
             key: 'match',
             content: <Lozenge appearance={matches ? 'success' : 'removed'}>{matches ? 'Matches' : 'Differs'}</Lozenge>,
+          },
+          {
+            key: 'edit',
+            content: (
+              <Button appearance="subtle" spacing="compact" onClick={() => setEditing({ key, label })}>
+                Edit record
+              </Button>
+            ),
           },
         ],
       };
@@ -231,9 +566,9 @@ const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
               View on explorer
             </Link>
           )}
-          <Button onClick={check} isLoading={checking}>
+          <LoadingButton onClick={check} isLoading={checking}>
             Check now
-          </Button>
+          </LoadingButton>
           <Button appearance="danger" onClick={() => setConfirmRemove(true)}>
             Remove
           </Button>
@@ -241,7 +576,7 @@ const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
       </Inline>
 
       {error && (
-        <SectionMessage appearance="error" title="Check failed">
+        <SectionMessage appearance="error" title="That didn't work">
           <Text>{error}</Text>
         </SectionMessage>
       )}
@@ -249,8 +584,8 @@ const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
       {contract.status === 'drift' && (
         <SectionMessage appearance="error" title="The chain no longer matches the record">
           <Text>
-            {contract.differences.map((d) => d.label).join(', ')} changed on the chain since this contract was
-            recorded. If nobody planned this change, treat it as an incident.
+            {contract.differences.map((d) => d.label).join(', ')} on the chain differs from the record. If nobody
+            planned this change, treat it as an incident. Reconcile it under Open changes below.
           </Text>
         </SectionMessage>
       )}
@@ -273,11 +608,74 @@ const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
               { key: 'recorded', content: 'Recorded' },
               { key: 'chain', content: 'On chain' },
               { key: 'match', content: 'Status' },
+              { key: 'edit', content: '' },
             ],
           }}
           rows={rows}
         />
       </Stack>
+
+      {changes && changes.open.length > 0 && (
+        <Stack space="space.200">
+          <Heading as="h2">Open changes</Heading>
+          {changes.open.map((change) => (
+            <OpenChange key={change.id} change={change} onReconcile={(target, mode) => setReconciling({ change: target, mode })} />
+          ))}
+        </Stack>
+      )}
+
+      <LinkedIssues key={linksVersion} contractId={contract.id} />
+
+      <Stack space="space.100">
+        <Heading as="h2">History</Heading>
+        {!changes && <Spinner size="small" label="Loading history" />}
+        {changes && changes.history.length === 0 && (
+          <Text>No changes have been reconciled yet. Each change Onveris detects is kept here with what explained it.</Text>
+        )}
+        {changes && changes.history.length > 0 && (
+          <DynamicTable
+            label="Change history"
+            rowsPerPage={10}
+            head={{
+              cells: [
+                { key: 'when', content: 'Detected' },
+                { key: 'field', content: 'What changed' },
+                { key: 'values', content: 'Before → after' },
+                { key: 'status', content: 'Outcome' },
+                { key: 'explained', content: 'Explained by' },
+              ],
+            }}
+            rows={historyRows(changes.history)}
+          />
+        )}
+      </Stack>
+
+      <ModalTransition>
+        {editing && (
+          <EditRecordModal
+            contract={contract}
+            field={editing}
+            onClose={() => setEditing(null)}
+            onSaved={(result) => {
+              setEditing(null);
+              applyResult(result);
+            }}
+          />
+        )}
+      </ModalTransition>
+      <ModalTransition>
+        {reconciling && (
+          <ReconcileModal
+            change={reconciling.change}
+            mode={reconciling.mode}
+            onClose={() => setReconciling(null)}
+            onDone={(result) => {
+              setReconciling(null);
+              applyResult(result);
+            }}
+          />
+        )}
+      </ModalTransition>
 
       <ModalTransition>
         {confirmRemove && (
@@ -306,6 +704,9 @@ const App = () => {
   const [registering, setRegistering] = useState(false);
   const [checkingAll, setCheckingAll] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [search, setSearch] = useState('');
+  const [chainFilter, setChainFilter] = useState(null);
+  const [statusFilter, setStatusFilter] = useState(null);
 
   const load = useCallback(async () => {
     const result = await call('getRegistry');
@@ -387,6 +788,7 @@ const App = () => {
       {registering && (
         <RegisterModal
           chains={setup.chains}
+          fields={setup.fields}
           onClose={() => setRegistering(false)}
           onRegistered={(contract) => {
             setRegistering(false);
@@ -415,7 +817,21 @@ const App = () => {
     );
   }
 
-  const rows = registry.contracts.map((contract) => ({
+  const needle = search.trim().toLowerCase();
+  const visible = registry.contracts.filter(
+    (contract) =>
+      (!chainFilter || contract.chain === chainFilter.value) &&
+      (!statusFilter || contract.status === statusFilter.value) &&
+      (!needle || contract.name.toLowerCase().includes(needle) || contract.address.includes(needle))
+  );
+  const filtered = Boolean(needle || chainFilter || statusFilter);
+  const clearFilters = () => {
+    setSearch('');
+    setChainFilter(null);
+    setStatusFilter(null);
+  };
+
+  const rows = visible.map((contract) => ({
     key: contract.id,
     cells: [
       {
@@ -441,9 +857,9 @@ const App = () => {
           <Text>{summaryText(registry.summary)}</Text>
         </Stack>
         <ButtonGroup>
-          <Button onClick={checkAll} isLoading={checkingAll}>
+          <LoadingButton onClick={checkAll} isLoading={checkingAll}>
             Check now
-          </Button>
+          </LoadingButton>
           <Button appearance="primary" onClick={() => setRegistering(true)}>
             Register contract
           </Button>
@@ -456,7 +872,58 @@ const App = () => {
         </SectionMessage>
       )}
 
+      {!registry.raisesIssues && (
+        <SectionMessage appearance="information" title="Changes are not raising Jira issues yet">
+          <Text>
+            Onveris detects changes and shows them here. To also get a Jira issue for each unrecorded change, a Jira
+            admin chooses a project under Jira settings, Apps, Onveris.
+          </Text>
+        </SectionMessage>
+      )}
+
+      <Inline space="space.150" alignBlock="end" shouldWrap>
+        <Box xcss={filterBox}>
+          <Label labelFor="filter-search">Search</Label>
+          <Textfield
+            id="filter-search"
+            placeholder="Name or address"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </Box>
+        <Box xcss={filterBox}>
+          <Label labelFor="filter-chain">Chain</Label>
+          <Select
+            inputId="filter-chain"
+            placeholder="All chains"
+            options={setup.chains}
+            value={chainFilter}
+            onChange={setChainFilter}
+            isClearable
+          />
+        </Box>
+        <Box xcss={filterBox}>
+          <Label labelFor="filter-status">Status</Label>
+          <Select
+            inputId="filter-status"
+            placeholder="All statuses"
+            options={STATUS_OPTIONS}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            isClearable
+          />
+        </Box>
+        {filtered && (
+          <Button appearance="subtle" onClick={clearFilters}>
+            Clear filters
+          </Button>
+        )}
+      </Inline>
+
       <DynamicTable
+        label="Registered contracts"
+        emptyView={<Text>No contracts match these filters.</Text>}
+        rowsPerPage={25}
         head={{
           cells: [
             { key: 'name', content: 'Name' },
