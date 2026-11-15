@@ -429,6 +429,15 @@ const OpenChange = ({ change, onReconcile }) => (
     </Inline>
     <Text>Recorded: {change.oldValue || 'None'}</Text>
     <Text>On chain: {change.newValue || 'None'}</Text>
+    {change.txUrl && (
+      <Text>
+        Changed by transaction{' '}
+        <Link href={change.txUrl} openNewTab>
+          {shorten(change.txHash)}
+        </Link>{' '}
+        at block {change.blockNumber}
+      </Text>
+    )}
     {change.driftIssue && (
       <Text>
         Raised as <IssueLink issue={change.driftIssue} /> {change.driftIssue.summary}
@@ -453,7 +462,22 @@ const historyRows = (history) =>
     return {
       key: change.id,
       cells: [
-        { key: 'when', content: <Text>{timeAgo(change.detectedAt)}</Text> },
+        {
+          key: 'when',
+          content: (
+            <Text>
+              {timeAgo(change.detectedAt)}
+              {change.txUrl && (
+                <>
+                  {' · '}
+                  <Link href={change.txUrl} openNewTab>
+                    transaction
+                  </Link>
+                </>
+              )}
+            </Text>
+          ),
+        },
         { key: 'field', content: <Text>{change.label}</Text> },
         {
           key: 'values',

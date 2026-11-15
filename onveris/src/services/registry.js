@@ -102,14 +102,20 @@ export async function registerContract(input, accountId) {
 // Re-reads one contract and updates its status. A failed read marks it unreachable and
 // keeps the last known state: it is never treated as a change on the chain.
 export async function checkContract(id) {
-  const contract = await getContract(id);
-  if (!contract) throw new RegistryError('This contract is no longer registered.');
+  const registered = await requireContract(id);
+  // The chain read is the slow part. The record is loaded again after it, so that a
+  // reconcile or an edit made in the meantime is not overwritten with what was loaded before.
+  const reload = async () => (await getContract(id)) || registered;
+  let contract = registered;
 
   try {
-    const state = await readContract(contract.chain, contract.address);
+    const state = await readContract(registered.chain, registered.address);
+    contract = await reload();
     const observed = pickTracked(state);
     const differences = findDifferences(contract.baseline, observed);
     Object.assign(contract, {
+      // The block of the previous successful read: a change found now happened after it.
+      previousBlock: contract.lastBlock || null,
       observed,
       kind: state.kind,
       status: differences.length > 0 ? 'drift' : 'in_sync',
@@ -120,6 +126,7 @@ export async function checkContract(id) {
   } catch (error) {
     if (error.name !== 'ChainUnreachableError') throw error;
     console.warn(error.message);
+    contract = await reload();
     Object.assign(contract, { status: 'unreachable', lastError: new Date().toISOString() });
   }
   await saveContract(contract);

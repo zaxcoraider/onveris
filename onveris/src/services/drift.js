@@ -1,11 +1,13 @@
 import { isAddress } from './reader.js';
 import { decide } from './decide.js';
 import { createDriftIssue } from './issues.js';
+import { findChangeTransaction } from './history.js';
 import { TRACKED_FIELDS, RegistryError, checkContract, describeContract, findDifferences } from './registry.js';
 import { getContract, saveContract, listContracts } from '../storage/contracts.js';
 import { newChangeId, listChanges, getChange, saveChange } from '../storage/changes.js';
 import { plannedId, listPlanned, getPlanned, savePlanned, deletePlanned } from '../storage/planned.js';
 import { getSettings } from '../storage/settings.js';
+import { withLock } from '../storage/locks.js';
 
 // Turns the differences a check finds into Change records, raises a Jira issue for the ones
 // nobody announced, and updates the record when a change is reconciled.
@@ -45,10 +47,31 @@ async function raiseIssue(change, contract, settings) {
   return true;
 }
 
+const BUSY = 'This contract is being checked right now. Try again in a moment.';
+const lockName = (contractId) => `contract:${contractId}`;
+
+const openChangesFor = async (contractId) =>
+  (await listChanges(contractId)).filter((change) => change.status === 'unreconciled');
+
 // Brings the Change records for a contract in line with what the last read found.
+// Nothing differing and nothing open is the usual case and needs no claim. Otherwise the work
+// runs under a claim on the contract, so that a scheduled and a manual check arriving together
+// cannot both record the same change and raise two issues. Whoever loses the claim leaves the
+// work to the winner.
 async function syncChanges(contract) {
+  const differs = findDifferences(contract.baseline, contract.observed).length > 0;
+  if (!differs && (await openChangesFor(contract.id)).length === 0) return contract;
+  const result = await withLock(lockName(contract.id), async () => {
+    const current = await getContract(contract.id);
+    return current ? applyDifferences(current) : contract;
+  });
+  return result.acquired ? result.value : contract;
+}
+
+// Must run under the contract's claim, on a freshly loaded contract.
+async function applyDifferences(contract) {
   const differences = findDifferences(contract.baseline, contract.observed);
-  const open = (await listChanges(contract.id)).filter((change) => change.status === 'unreconciled');
+  const open = await openChangesFor(contract.id);
   if (differences.length === 0 && open.length === 0) return contract;
 
   const planned = (await listPlanned(contract.id)).filter((plan) => plan.status === 'open');
@@ -69,6 +92,8 @@ async function syncChanges(contract) {
       status: 'unreconciled',
       driftIssue: null,
     };
+    // Where the chain says which transaction made the change, keep it: { txHash, blockNumber, txUrl }.
+    Object.assign(change, await findChangeTransaction(contract, change.field, change.newValue));
     if (announced) {
       // An issue said this would happen: record it against that issue and accept the new value.
       Object.assign(change, { status: 'planned', resolutionIssue: announced.issue, resolvedAt: change.detectedAt });
@@ -136,23 +161,36 @@ export async function checkAllAndRecord({ budgetMs = Infinity } = {}) {
   return summary;
 }
 
-async function openChange(changeId) {
-  const change = await getChange(String(changeId || ''));
-  if (!change) throw new RegistryError('This change no longer exists.');
-  if (change.status !== 'unreconciled') throw new RegistryError('This change has already been reconciled.');
-  const contract = await getContract(change.contractId);
-  if (!contract) throw new RegistryError('This contract is no longer registered.');
-  return { change, contract };
+// Runs work that changes a contract's record under the contract's claim.
+async function exclusively(contractId, work) {
+  const result = await withLock(lockName(contractId), work);
+  if (!result.acquired) throw new RegistryError(BUSY);
+  return result.value;
 }
 
-// Closes a change and makes the record take the value now on the chain.
-async function resolve({ change, contract }, resolution, accountId) {
-  const current = contract.observed[change.field] ?? null;
-  contract.baseline[change.field] = current;
-  refreshStatus(contract);
-  await saveChange({ ...change, ...resolution, newValue: current, resolvedBy: accountId || null, resolvedAt: now() });
-  await saveContract(contract);
-  return contract;
+async function requireChange(changeId) {
+  const change = await getChange(String(changeId || ''));
+  if (!change) throw new RegistryError('This change no longer exists.');
+  return change;
+}
+
+// Closes a change and makes the record take the value now on the chain. `issue` is added to
+// the contract's linked issues when the change is being explained by one.
+async function resolve(changeId, resolution, accountId, issue) {
+  const { contractId } = await requireChange(changeId);
+  return exclusively(contractId, async () => {
+    const change = await requireChange(changeId);
+    if (change.status !== 'unreconciled') throw new RegistryError('This change has already been reconciled.');
+    const contract = await getContract(contractId);
+    if (!contract) throw new RegistryError('This contract is no longer registered.');
+    const current = contract.observed[change.field] ?? null;
+    contract.baseline[change.field] = current;
+    if (issue) addIssueLink(contract, issue, accountId);
+    refreshStatus(contract);
+    await saveChange({ ...change, ...resolution, newValue: current, resolvedBy: accountId || null, resolvedAt: now() });
+    await saveContract(contract);
+    return contract;
+  });
 }
 
 // "We know about this change and accept it", with a note saying why.
@@ -160,14 +198,12 @@ export async function acknowledgeChange(changeId, note, accountId) {
   const cleanNote = String(note || '').trim();
   if (!cleanNote) throw new RegistryError('Say briefly why this change is accepted.');
   if (cleanNote.length > 500) throw new RegistryError('Keep the note under 500 characters.');
-  return resolve(await openChange(changeId), { status: 'acknowledged', note: cleanNote }, accountId);
+  return resolve(changeId, { status: 'acknowledged', note: cleanNote }, accountId);
 }
 
 // "This issue explains the change." The caller has confirmed the user can view the issue.
 export async function reconcileWithIssue(changeId, issue, accountId) {
-  const found = await openChange(changeId);
-  addIssueLink(found.contract, issue, accountId);
-  return resolve(found, { status: 'reconciled', resolutionIssue: { id: issue.id, key: issue.key } }, accountId);
+  return resolve(changeId, { status: 'reconciled', resolutionIssue: { id: issue.id, key: issue.key } }, accountId, issue);
 }
 
 function cleanValue(field, value) {
@@ -188,13 +224,17 @@ function requireField(field) {
 // Changes a recorded value by hand, then checks the chain against the new record.
 export async function editBaseline(id, field, value, accountId) {
   requireField(field);
-  const contract = await getContract(String(id || ''));
-  if (!contract) throw new RegistryError('This contract is no longer registered.');
-  contract.baseline[field] = cleanValue(field, value);
-  contract.lastEdit = { field, by: accountId || null, at: now() };
-  refreshStatus(contract);
-  await saveContract(contract);
-  return checkAndRecord(contract.id);
+  const contractId = String(id || '');
+  const recorded = cleanValue(field, value);
+  await exclusively(contractId, async () => {
+    const contract = await getContract(contractId);
+    if (!contract) throw new RegistryError('This contract is no longer registered.');
+    contract.baseline[field] = recorded;
+    contract.lastEdit = { field, by: accountId || null, at: now() };
+    refreshStatus(contract);
+    await saveContract(contract);
+  });
+  return checkAndRecord(contractId);
 }
 
 // An issue announces that it will change one value of a contract it is linked to.

@@ -8,7 +8,7 @@ const hexToBytes = (hex) => {
   for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(clean.substr(i * 2, 2), 16);
   return bytes;
 };
-const keccakText = (text) => toHex(keccak_256(new TextEncoder().encode(text)));
+export const keccakText = (text) => toHex(keccak_256(new TextEncoder().encode(text)));
 const minusOne = (hex) => '0x' + (BigInt(hex) - 1n).toString(16).padStart(64, '0');
 
 // Storage slots where proxies keep their implementation and admin addresses.

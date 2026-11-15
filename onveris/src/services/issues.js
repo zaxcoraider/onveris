@@ -84,6 +84,7 @@ export async function createDriftIssue({ project, issueType }, change, contract)
         bold('Contract: '),
         contract.explorerUrl ? link(contract.address, contract.explorerUrl) : code(contract.address)
       ),
+      ...(change.txUrl ? [paragraph(bold('Transaction: '), link(change.txHash, change.txUrl))] : []),
       paragraph(
         bold('Detected: '),
         text(`${change.detectedAt}${change.blockNumber ? `, at block ${change.blockNumber}` : ''}`)
