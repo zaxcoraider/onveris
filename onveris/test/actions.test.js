@@ -41,7 +41,10 @@ mock.module('../src/services/reader.js', {
 });
 mock.module('../src/services/history.js', { namedExports: { findChangeTransaction: async () => null } });
 mock.module('../src/services/issues.js', {
-  namedExports: { createDriftIssue: async () => ({ id: '30001', key: 'SECRET-7' }) },
+  namedExports: {
+    createDriftIssue: async () => ({ id: '30001', key: 'SECRET-7' }),
+    closeDriftIssue: async () => ({ commented: true, closed: true }),
+  },
 });
 
 const registry = await import('../src/services/registry.js');

@@ -1,6 +1,6 @@
 import { isAddress } from './reader.js';
 import { decide } from './decide.js';
-import { createDriftIssue } from './issues.js';
+import { createDriftIssue, closeDriftIssue } from './issues.js';
 import { findChangeTransaction } from './history.js';
 import { TRACKED_FIELDS, RegistryError, checkContract, describeContract, findDifferences } from './registry.js';
 import { getContract, saveContract, listContracts } from '../storage/contracts.js';
@@ -118,7 +118,9 @@ async function applyDifferences(contract) {
   }
 
   for (const change of plan.clear) {
-    await saveChange({ ...change, status: 'cleared', resolvedAt: now() });
+    const cleared = { ...change, status: 'cleared', resolvedAt: now() };
+    await saveChange(cleared);
+    await updateDriftIssue(cleared);
   }
 
   if (contractChanged) {
@@ -161,6 +163,26 @@ export async function checkAllAndRecord({ budgetMs = Infinity } = {}) {
   return summary;
 }
 
+// One sentence for the drift issue's comment saying how its change was resolved. User notes
+// are quoted. The issue that explains a change is not named: people who can see the drift
+// issue may not be allowed to see that one.
+function outcomeSentence(change) {
+  if (change.status === 'acknowledged') {
+    return `The change was acknowledged with this note: “${change.note}”. The record now matches the chain.`;
+  }
+  if (change.status === 'reconciled') {
+    return 'The change was linked to the issue that explains it. The record now matches the chain.';
+  }
+  return 'The chain matches the record again, so this change no longer stands.';
+}
+
+// Comments on and closes the drift issue of a resolved change, and remembers that it did.
+async function updateDriftIssue(change) {
+  if (!change.driftIssue) return;
+  const { commented, closed } = await closeDriftIssue(change.driftIssue, outcomeSentence(change));
+  if (commented || closed) await saveChange({ ...change, driftIssueClosed: closed, driftIssueUpdatedAt: now() });
+}
+
 // Runs work that changes a contract's record under the contract's claim.
 async function exclusively(contractId, work) {
   const result = await withLock(lockName(contractId), work);
@@ -178,7 +200,7 @@ async function requireChange(changeId) {
 // the contract's linked issues when the change is being explained by one.
 async function resolve(changeId, resolution, accountId, issue) {
   const { contractId } = await requireChange(changeId);
-  return exclusively(contractId, async () => {
+  const resolved = await exclusively(contractId, async () => {
     const change = await requireChange(changeId);
     if (change.status !== 'unreconciled') throw new RegistryError('This change has already been reconciled.');
     const contract = await getContract(contractId);
@@ -187,10 +209,14 @@ async function resolve(changeId, resolution, accountId, issue) {
     contract.baseline[change.field] = current;
     if (issue) addIssueLink(contract, issue, accountId);
     refreshStatus(contract);
-    await saveChange({ ...change, ...resolution, newValue: current, resolvedBy: accountId || null, resolvedAt: now() });
+    const closed = { ...change, ...resolution, newValue: current, resolvedBy: accountId || null, resolvedAt: now() };
+    await saveChange(closed);
     await saveContract(contract);
-    return contract;
+    return { contract, change: closed };
   });
+  // Outside the claim: a slow Jira must not hold up the next check.
+  await updateDriftIssue(resolved.change);
+  return resolved.contract;
 }
 
 // "We know about this change and accept it", with a note saying why.

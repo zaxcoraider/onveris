@@ -1,4 +1,4 @@
-import api, { route } from '@forge/api';
+import api, { route, getAppContext } from '@forge/api';
 
 // Jira reads, always as the current user, so nobody is shown an issue they cannot view.
 
@@ -67,6 +67,33 @@ export async function pickIssueType(projectId) {
   return chosen ? { id: String(chosen.id), name: chosen.name } : null;
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// "15 Nov 2026, 07:27 UTC". Issues are read by people in any time zone, so always UTC.
+export function formatTime(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return String(iso ?? '');
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}, ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())} UTC`;
+}
+
+// The address of the Onveris page on this site, or null if it cannot be worked out.
+// Runs as the app, so it also works from the scheduled checker.
+let pageUrl;
+async function onverisPageUrl() {
+  if (pageUrl !== undefined) return pageUrl;
+  try {
+    const { appAri, environmentAri } = getAppContext();
+    const response = await api.asApp().requestJira(route`/rest/api/3/serverInfo`, { headers: json });
+    const { baseUrl } = response.ok ? await response.json() : {};
+    pageUrl = baseUrl ? `${baseUrl}/jira/apps/${appAri.appId}/${environmentAri.environmentId}` : null;
+  } catch (error) {
+    console.warn(`[issues] could not work out the Onveris page address: ${error.message}`);
+    pageUrl = null;
+  }
+  return pageUrl;
+}
+
 const paragraph = (...content) => ({ type: 'paragraph', content });
 const text = (value, marks) => ({ type: 'text', text: String(value), ...(marks ? { marks } : {}) });
 const bold = (value) => text(value, [{ type: 'strong' }]);
@@ -76,6 +103,7 @@ const link = (label, href) => text(label, [{ type: 'link', attrs: { href } }]);
 // Creates the Jira issue for a change nobody announced. Runs as the app, because the
 // scheduled checker has no user. Returns { id, key }.
 export async function createDriftIssue({ project, issueType }, change, contract) {
+  const page = await onverisPageUrl();
   const description = {
     type: 'doc',
     version: 1,
@@ -96,13 +124,15 @@ export async function createDriftIssue({ project, issueType }, change, contract)
       ...(change.txUrl ? [paragraph(bold('Transaction: '), link(change.txHash, change.txUrl))] : []),
       paragraph(
         bold('Detected: '),
-        text(`${change.detectedAt}${change.blockNumber ? `, at block ${change.blockNumber}` : ''}`)
+        text(`${formatTime(change.detectedAt)}${change.blockNumber ? `, at block ${change.blockNumber}` : ''}`)
       ),
       paragraph(
         bold('What to do: '),
+        text('Find out who made the change and why. Then open '),
+        page ? link(`${contract.name} in Onveris`, page) : text(`${contract.name} in Onveris (Jira Apps menu)`),
         text(
-          'Find out who made the change and why. Then open the contract in Onveris (Apps menu) and either link ' +
-            'the change to the issue that explains it or acknowledge it. The record is then updated to match the chain.'
+          ' and either link the change to the issue that explains it or acknowledge it. The record is then ' +
+            'updated to match the chain, and Onveris closes this issue.'
         )
       ),
     ],
@@ -125,4 +155,79 @@ export async function createDriftIssue({ project, issueType }, change, contract)
   if (!response.ok) throw new Error(`Jira answered ${response.status} creating an issue: ${await response.text()}`);
   const created = await response.json();
   return { id: String(created.id), key: created.key };
+}
+
+const RESOLUTION_PREFERENCE = ['done', 'fixed', 'resolved', 'complete', 'completed'];
+
+// Picks a done transition and the fields it needs. A transition qualifies when every required
+// field without a default is Resolution, which Onveris can fill in. Pure, so it can be tested.
+export function chooseDoneTransition(transitions) {
+  const candidates = (transitions || []).filter((t) => t.to?.statusCategory?.key === 'done');
+  for (const transition of candidates) {
+    const missing = Object.entries(transition.fields || {}).filter(([, f]) => f.required && !f.hasDefaultValue);
+    if (missing.length === 0) return { id: transition.id, fields: {} };
+    if (missing.length === 1 && missing[0][0] === 'resolution') {
+      const options = missing[0][1].allowedValues || [];
+      const named = (name) => options.find((o) => String(o.name || '').toLowerCase() === name);
+      const pick = RESOLUTION_PREFERENCE.map(named).find(Boolean) || options[0];
+      if (pick) return { id: transition.id, fields: { resolution: { id: String(pick.id) } } };
+    }
+  }
+  return null;
+}
+
+// Moves an issue to a done status. Returns false when the workflow has no transition Onveris
+// can take, or it is refused; the reason is logged.
+async function moveToDone(issue) {
+  const response = await api
+    .asApp()
+    .requestJira(route`/rest/api/3/issue/${issue.id}/transitions?expand=transitions.fields`, { headers: json });
+  if (!response.ok) {
+    console.warn(`[issues] cannot read transitions of ${issue.key}: ${response.status}`);
+    return false;
+  }
+  const { transitions = [] } = await response.json();
+  const choice = chooseDoneTransition(transitions);
+  if (!choice) {
+    const seen = transitions.map((t) => ({
+      name: t.name,
+      to: t.to?.statusCategory?.key,
+      required: Object.entries(t.fields || {}).filter(([, f]) => f.required && !f.hasDefaultValue).map(([k]) => k),
+    }));
+    console.warn(`[issues] no done transition for ${issue.key} without extra fields: ${JSON.stringify(seen)}`);
+    return false;
+  }
+  const moved = await api.asApp().requestJira(route`/rest/api/3/issue/${issue.id}/transitions`, {
+    method: 'POST',
+    headers: json,
+    body: JSON.stringify({ transition: { id: choice.id }, fields: choice.fields }),
+  });
+  if (!moved.ok) console.warn(`[issues] moving ${issue.key} to done refused: ${moved.status} ${await moved.text()}`);
+  return moved.ok;
+}
+
+// Tells the drift issue how its change was resolved, and closes it where the workflow allows.
+// `outcome` is one sentence. Runs as the app. Never throws: the change is already resolved in
+// Onveris, and a Jira problem must not undo that. Returns { commented, closed }.
+export async function closeDriftIssue(issue, outcome) {
+  const result = { commented: false, closed: false };
+  try {
+    result.closed = await moveToDone(issue);
+    const page = await onverisPageUrl();
+    const content = [paragraph(bold('Resolved in Onveris. '), text(outcome))];
+    if (!result.closed) {
+      content.push(paragraph(text('Onveris could not move this issue to done in this workflow. Close it by hand.')));
+    }
+    if (page) content.push(paragraph(link('Open Onveris', page)));
+    const response = await api.asApp().requestJira(route`/rest/api/3/issue/${issue.id}/comment`, {
+      method: 'POST',
+      headers: json,
+      body: JSON.stringify({ body: { type: 'doc', version: 1, content } }),
+    });
+    result.commented = response.ok;
+    if (!response.ok) console.warn(`[issues] comment on ${issue.key} refused: ${response.status}`);
+  } catch (error) {
+    console.warn(`[issues] could not update ${issue.key}: ${error.message}`);
+  }
+  return result;
 }

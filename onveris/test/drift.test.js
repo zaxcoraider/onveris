@@ -38,7 +38,7 @@ const listByPrefix = async (prefix) => {
 
 // --- scripted chain and Jira
 const chain = { state: null, unreachable: false, block: 100 };
-const jira = { created: [], fail: false };
+const jira = { created: [], closed: [], fail: false, cannotClose: false, closeFails: false };
 const unreachableError = () => Object.assign(new Error('Could not reach ethereum'), { name: 'ChainUnreachableError' });
 
 mock.module('../src/storage/kv.js', { namedExports: { kvs, listByPrefix } });
@@ -57,6 +57,12 @@ mock.module('../src/services/reader.js', {
 mock.module('../src/services/history.js', { namedExports: { findChangeTransaction: async () => null } });
 mock.module('../src/services/issues.js', {
   namedExports: {
+    closeDriftIssue: async (issue, outcome) => {
+      await tick();
+      jira.closed.push({ key: issue.key, outcome });
+      if (jira.closeFails) throw new Error('should never throw, but must not break reconcile');
+      return { commented: true, closed: !jira.cannotClose };
+    },
     createDriftIssue: async (settings, change) => {
       await tick();
       if (jira.fail) throw new Error('Jira answered 400');
@@ -79,7 +85,7 @@ const register = () => registry.registerContract({ chain: 'ethereum', address: A
 beforeEach(() => {
   store.clear();
   Object.assign(chain, { state: { implementation: A, admin: A, beacon: null, owner: A, codeHash: '0x01' }, unreachable: false, block: 100 });
-  Object.assign(jira, { created: [], fail: false });
+  Object.assign(jira, { created: [], closed: [], fail: false, cannotClose: false, closeFails: false });
 });
 
 test('a check that finds nothing different records nothing', async () => {
@@ -290,4 +296,61 @@ test('checking everything keeps going when one contract fails', async () => {
   chain.unreachable = false;
   const summary = await drift.checkAllAndRecord();
   assert.equal(summary.checked + summary.failed, 2);
+});
+
+test('acknowledging closes the drift issue with the note in the comment', async () => {
+  await register();
+  await chooseProject();
+  chain.state.owner = B;
+  await drift.checkAndRecord(ID);
+  const [open] = await changes();
+  await drift.acknowledgeChange(open.id, 'Agreed in the incident call', 'user-2');
+  assert.equal(jira.closed.length, 1);
+  assert.equal(jira.closed[0].key, 'SEC-1');
+  assert.match(jira.closed[0].outcome, /Agreed in the incident call/);
+  assert.equal((await changes())[0].driftIssueClosed, true);
+});
+
+test('reconciling closes the drift issue without naming the explaining issue', async () => {
+  await register();
+  await chooseProject();
+  chain.state.owner = B;
+  await drift.checkAndRecord(ID);
+  const [open] = await changes();
+  await drift.reconcileWithIssue(open.id, ISSUE, 'user-2');
+  assert.equal(jira.closed.length, 1);
+  assert.ok(!jira.closed[0].outcome.includes(ISSUE.key));
+});
+
+test('a change that clears on its own closes its drift issue', async () => {
+  await register();
+  await chooseProject();
+  chain.state.owner = B;
+  await drift.checkAndRecord(ID);
+  chain.state.owner = A;
+  await drift.checkAndRecord(ID);
+  assert.equal((await changes())[0].status, 'cleared');
+  assert.equal(jira.closed.length, 1);
+  assert.match(jira.closed[0].outcome, /matches the record again/);
+});
+
+test('a workflow that cannot close the issue is remembered, and the reconcile still stands', async () => {
+  await register();
+  await chooseProject();
+  jira.cannotClose = true;
+  chain.state.owner = B;
+  await drift.checkAndRecord(ID);
+  const [open] = await changes();
+  const resolved = await drift.acknowledgeChange(open.id, 'known', 'user-2');
+  assert.equal(resolved.status, 'in_sync');
+  assert.equal((await changes())[0].driftIssueClosed, false);
+});
+
+test('a change with no drift issue does not touch Jira when resolved', async () => {
+  await register();
+  chain.state.owner = B;
+  await drift.checkAndRecord(ID);
+  const [open] = await changes();
+  await drift.acknowledgeChange(open.id, 'known', 'user-2');
+  assert.equal(jira.closed.length, 0);
 });
