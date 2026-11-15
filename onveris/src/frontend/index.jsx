@@ -731,6 +731,7 @@ const App = () => {
   const [search, setSearch] = useState('');
   const [chainFilter, setChainFilter] = useState(null);
   const [statusFilter, setStatusFilter] = useState(null);
+  const [sampleAction, setSampleAction] = useState(null);
 
   const load = useCallback(async () => {
     const result = await call('getRegistry');
@@ -756,6 +757,32 @@ const App = () => {
     setCheckingAll(false);
     if (result.ok) setRegistry(result);
     else setNotice({ appearance: 'error', text: result.message });
+  };
+
+  const loadSampleContracts = async () => {
+    setSampleAction('load');
+    setNotice(null);
+    const result = await call('loadSamples');
+    setSampleAction(null);
+    if (!result.ok) return setNotice({ appearance: 'error', text: result.message });
+    setRegistry(result);
+    const { added, alreadyThere, failed } = result.loaded;
+    const parts = [
+      added.length > 0 && `Loaded ${added.length} sample ${added.length === 1 ? 'contract' : 'contracts'}, read live from their chains.`,
+      alreadyThere.length > 0 && `${alreadyThere.length} ${alreadyThere.length === 1 ? 'was' : 'were'} already registered.`,
+      failed.length > 0 && `Couldn't reach the chain for ${failed.join(', ')}. Try loading again in a moment.`,
+    ].filter(Boolean);
+    setNotice({ appearance: failed.length > 0 ? 'warning' : 'success', text: parts.join(' ') });
+  };
+
+  const removeSampleContracts = async () => {
+    setSampleAction('remove');
+    setNotice(null);
+    const result = await call('removeSamples');
+    setSampleAction(null);
+    if (!result.ok) return setNotice({ appearance: 'error', text: result.message });
+    setRegistry(result);
+    setNotice({ appearance: 'success', text: `Removed ${result.removed} sample ${result.removed === 1 ? 'contract' : 'contracts'}.` });
   };
 
   const replaceContract = (updated) =>
@@ -827,12 +854,23 @@ const App = () => {
   if (registry.contracts.length === 0) {
     return (
       <>
+        {notice && (
+          <SectionMessage appearance={notice.appearance}>
+            <Text>{notice.text}</Text>
+          </SectionMessage>
+        )}
         <EmptyState
           header="Keep your contract records true to the chain"
-          description="Register a smart contract and Onveris records its implementation, admin, owner and code. It then checks the chain and tells you when something changes. Read-only: no wallet or keys."
+          description="Register a smart contract and Onveris records its implementation, admin, owner and code. It then checks the chain and tells you when something changes. Read-only: no wallet or keys. To look around first, load a few well-known public contracts as samples."
+          isLoading={sampleAction === 'load'}
           primaryAction={
-            <Button appearance="primary" onClick={() => setRegistering(true)}>
+            <Button appearance="primary" onClick={() => setRegistering(true)} isDisabled={sampleAction !== null}>
               Register a contract
+            </Button>
+          }
+          secondaryAction={
+            <Button onClick={loadSampleContracts} isDisabled={sampleAction !== null}>
+              Load sample contracts
             </Button>
           }
         />
@@ -881,6 +919,11 @@ const App = () => {
           <Text>{summaryText(registry.summary)}</Text>
         </Stack>
         <ButtonGroup>
+          {registry.contracts.some((contract) => contract.sample) && (
+            <LoadingButton appearance="subtle" onClick={removeSampleContracts} isLoading={sampleAction === 'remove'}>
+              Remove samples
+            </LoadingButton>
+          )}
           <LoadingButton onClick={checkAll} isLoading={checkingAll}>
             Check now
           </LoadingButton>

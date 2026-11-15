@@ -73,7 +73,8 @@ export async function previewContract(input) {
 }
 
 // Reads the contract from the chain and records what it finds as the baseline.
-export async function registerContract(input, accountId) {
+// `extra` marks how the contract was added, for example { sample: true } from the sample loader.
+export async function registerContract(input, accountId, extra = {}) {
   const { chain, address, name } = validateInput(input);
   const id = contractId(chain, address);
   const state = await readForRegistration(chain, address);
@@ -92,6 +93,7 @@ export async function registerContract(input, accountId) {
     lastBlock: state.blockNumber,
     lastError: null,
     linkedIssues: [],
+    sample: Boolean(extra.sample),
     createdBy: accountId || null,
     createdAt: state.readAt,
   };

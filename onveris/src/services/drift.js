@@ -156,6 +156,8 @@ export async function checkAllAndRecord({ budgetMs = Infinity } = {}) {
       if (contract.status === 'drift') summary.drift += 1;
       if (contract.status === 'unreachable') summary.unreachable += 1;
     } catch (error) {
+      // Removed by someone while this run was under way: nothing to check, and not a failure.
+      if (error.name === 'RegistryError' && !(await getContract(id))) continue;
       console.error(error);
       summary.failed += 1;
     }

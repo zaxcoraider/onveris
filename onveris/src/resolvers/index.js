@@ -27,6 +27,7 @@ import {
   changesFor,
 } from '../services/drift.js';
 import { getSettings } from '../storage/settings.js';
+import { loadSamples, removeSamples } from '../services/samples.js';
 
 const resolver = new Resolver();
 
@@ -119,6 +120,13 @@ const contractAndChanges = async (contract) => ({
 });
 
 resolver.define('getRegistry', safely(registryView));
+
+resolver.define(
+  'loadSamples',
+  safely(async ({ context }) => ({ loaded: await loadSamples(context?.accountId), ...(await registryView()) }))
+);
+
+resolver.define('removeSamples', safely(async () => ({ ...(await removeSamples()), ...(await registryView()) })));
 
 resolver.define('previewContract', safely(async ({ payload }) => ({ preview: await previewContract(payload || {}) })));
 

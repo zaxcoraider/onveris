@@ -354,3 +354,17 @@ test('a change with no drift issue does not touch Jira when resolved', async () 
   await drift.acknowledgeChange(open.id, 'known', 'user-2');
   assert.equal(jira.closed.length, 0);
 });
+
+test('a contract removed while checking everything is skipped quietly', async () => {
+  await register();
+  store.set('contract:base:gone', { id: 'base:gone', name: 'Gone', chain: 'base', address: '0x' + '2'.repeat(40), baseline: {}, observed: {} });
+  const original = kvs.get;
+  kvs.get = async (key) => (key === 'contract:base:gone' ? undefined : original(key));
+  try {
+    const summary = await drift.checkAllAndRecord();
+    assert.equal(summary.failed, 0);
+    assert.equal(summary.checked, 1);
+  } finally {
+    kvs.get = original;
+  }
+});
