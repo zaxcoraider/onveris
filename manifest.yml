@@ -22,6 +22,16 @@ modules:
       render: native
       title: Onveris
       icon: resource:icons;onveris-light.svg
+  macro:
+    - key: onveris-contracts-table
+      resource: macro
+      resolver:
+        function: resolver
+      render: native
+      title: Onveris contracts
+      description: Live table of your team's registered smart contracts and whether each still matches its record.
+      icon: resource:icons;onveris-light.svg
+      config: true
   scheduledTrigger:
     - key: onveris-checker
       function: scheduledCheck
@@ -194,6 +204,8 @@ resources:
     path: src/frontend/issue-panel.jsx
   - key: settings
     path: src/frontend/settings.jsx
+  - key: macro
+    path: src/frontend/macro.jsx
   - key: icons
     path: static/icons
 permissions:
@@ -226,3 +238,10 @@ app:
     memoryMB: 256
     architecture: arm64
   id: ari:cloud:ecosystem::app/0d7d779b-4386-4240-a63a-675969946686
+  # Jira holds the installation and the storage; Confluence connects to the same one, so the
+  # macro reads the registry kept in Jira.
+  compatibility:
+    jira:
+      required: true
+    confluence:
+      required: false
