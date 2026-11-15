@@ -6,6 +6,7 @@ import ForgeReconciler, {
   Label,
   Link,
   LoadingButton,
+  Lozenge,
   SectionMessage,
   Select,
   Spinner,
@@ -97,7 +98,101 @@ const PlannedChange = ({ plan, busy, onRemove }) => (
   </Inline>
 );
 
-const LinkedContract = ({ contract, fields, busy, onUnlink, onDeclare, onRemovePlan }) => {
+const actionBox = xcss({ width: '320px' });
+
+// One unrecorded change, with the ways to close it without leaving the issue. `mode` is the form
+// open for this change: 'link' (name the issue that explains it) or 'acknowledge' (a note).
+const OpenChange = ({ change, issueKey, busy, onReconcile, onAcknowledge }) => {
+  const [mode, setMode] = useState(null);
+  const [text, setText] = useState('');
+  const close = () => {
+    setMode(null);
+    setText('');
+  };
+  const submit = async () => {
+    const ok = mode === 'link' ? await onReconcile(change.id, text) : await onAcknowledge(change.id, text);
+    if (ok) close();
+  };
+  const linking = mode === 'link';
+  return (
+    <Stack space="space.050">
+      <Inline space="space.100" alignBlock="center" shouldWrap>
+        <Text weight="bold">{change.label} changed</Text>
+        <Lozenge appearance="removed">Unrecorded</Lozenge>
+        <Text color="color.text.subtle">
+          detected {timeAgo(change.detectedAt)}
+          {change.blockNumber ? ` at block ${change.blockNumber}` : ''}
+        </Text>
+      </Inline>
+      <Text>Recorded: {change.oldValue || 'None'}</Text>
+      <Text>On chain: {change.newValue || 'None'}</Text>
+      {change.txUrl && (
+        <Text>
+          Changed by transaction{' '}
+          <Link href={change.txUrl} openNewTab>
+            {shorten(change.txHash)}
+          </Link>
+        </Text>
+      )}
+      {change.raisedHere ? (
+        <Text color="color.text.subtle">Onveris raised this issue for this change.</Text>
+      ) : (
+        change.driftIssue && (
+          <Text color="color.text.subtle">
+            Raised as {change.driftIssue.key}
+            {change.driftIssue.summary ? ` ${change.driftIssue.summary}` : ''}
+          </Text>
+        )
+      )}
+      {mode ? (
+        <Inline space="space.100" alignBlock="end" shouldWrap>
+          <Box xcss={actionBox}>
+            <Label labelFor={`panel-${mode}-${change.id}`}>{linking ? 'Issue key or link' : 'Note'}</Label>
+            <Textfield
+              id={`panel-${mode}-${change.id}`}
+              placeholder={linking ? 'The issue that planned it, for example OPS-12' : 'Why this change is accepted'}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+          </Box>
+          <LoadingButton
+            appearance="primary"
+            isLoading={busy === `${mode}:${change.id}`}
+            isDisabled={!text.trim() || busy !== null}
+            onClick={submit}
+          >
+            {linking ? 'Link and update record' : 'Acknowledge and update record'}
+          </LoadingButton>
+          <Button appearance="subtle" onClick={close} isDisabled={busy !== null}>
+            Cancel
+          </Button>
+        </Inline>
+      ) : (
+        <Inline space="space.100" shouldWrap>
+          {!change.raisedHere && (
+            <LoadingButton
+              spacing="compact"
+              appearance="primary"
+              isLoading={busy === `here:${change.id}`}
+              isDisabled={busy !== null}
+              onClick={() => onReconcile(change.id)}
+            >
+              {`${issueKey} explains it`}
+            </LoadingButton>
+          )}
+          <Button spacing="compact" isDisabled={busy !== null} onClick={() => setMode('link')}>
+            Link to another issue
+          </Button>
+          <Button spacing="compact" isDisabled={busy !== null} onClick={() => setMode('acknowledge')}>
+            Acknowledge
+          </Button>
+        </Inline>
+      )}
+    </Stack>
+  );
+};
+
+const LinkedContract = ({ contract, issueKey, fields, busy, onUnlink, onDeclare, onRemovePlan, onReconcile, onAcknowledge }) => {
   const [declaring, setDeclaring] = useState(false);
   return (
   <Stack space="space.050">
@@ -134,6 +229,16 @@ const LinkedContract = ({ contract, fields, busy, onUnlink, onDeclare, onRemoveP
         contract.
       </Text>
     )}
+    {contract.openChanges.map((change) => (
+      <OpenChange
+        key={change.id}
+        change={change}
+        issueKey={issueKey}
+        busy={busy}
+        onReconcile={onReconcile}
+        onAcknowledge={onAcknowledge}
+      />
+    ))}
     {contract.planned.map((plan) => (
       <PlannedChange
         key={plan.field}
@@ -169,6 +274,7 @@ const Panel = () => {
   const [choice, setChoice] = useState(null);
   const [busy, setBusy] = useState(null);
   const [fields, setFields] = useState([]);
+  const [notice, setNotice] = useState(null);
   const refreshed = useRef(false);
 
   const apply = (result) => {
@@ -183,6 +289,7 @@ const Panel = () => {
 
   const run = useCallback(async (action, name, payload) => {
     setBusy(action);
+    setNotice(null);
     const ok = apply(await call(name, payload));
     setBusy(null);
     return ok;
@@ -216,6 +323,21 @@ const Panel = () => {
     );
   }
 
+  // Closing a change raised on this issue also comments on the issue and moves it to done,
+  // which Jira's issue view shows only after a refresh.
+  const resolveChange = async (changeId, mode, name, payload) => {
+    const raisedHere = panel.linked.some((c) => c.openChanges.some((ch) => ch.id === changeId && ch.raisedHere));
+    const ok = await run(`${mode}:${changeId}`, name, payload);
+    if (ok) {
+      setNotice(
+        raisedHere
+          ? 'Record updated. Onveris commented on this issue and moved it to done; refresh the page to see its new status.'
+          : 'Record updated to match the chain.'
+      );
+    }
+    return ok;
+  };
+
   const link = async () => {
     if (await run('link', 'linkContractToIssue', { contractId: choice.value })) setChoice(null);
   };
@@ -231,6 +353,12 @@ const Panel = () => {
       {error && (
         <SectionMessage appearance="error">
           <Text>{error}</Text>
+        </SectionMessage>
+      )}
+
+      {notice && (
+        <SectionMessage appearance="success">
+          <Text>{notice}</Text>
         </SectionMessage>
       )}
 
@@ -253,6 +381,9 @@ const Panel = () => {
             run('declare', 'declarePlannedChange', { contractId, field, expectedValue })
           }
           onRemovePlan={(contractId, field) => run('removePlan', 'removePlannedChange', { contractId, field })}
+          issueKey={panel.issue.key}
+          onReconcile={(changeId, issueKey) => resolveChange(changeId, issueKey ? 'link' : 'here', 'reconcileFromPanel', { changeId, issueKey })}
+          onAcknowledge={(changeId, note) => resolveChange(changeId, 'acknowledge', 'acknowledgeFromPanel', { changeId, note })}
         />
       ))}
 

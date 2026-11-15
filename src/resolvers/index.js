@@ -27,6 +27,7 @@ import {
   changesFor,
 } from '../services/drift.js';
 import { getSettings } from '../storage/settings.js';
+import { getChange } from '../storage/changes.js';
 import { loadSamples, removeSamples } from '../services/samples.js';
 
 const resolver = new Resolver();
@@ -72,9 +73,16 @@ async function issuePanel(issue) {
       })
     ),
   });
+  const withDetails = async (contract) => ({
+    ...(await withPlans(contract)),
+    // Open changes, with the ones this issue was raised for first.
+    openChanges: (await contractChanges(contract.id)).open
+      .map((change) => ({ ...change, raisedHere: change.driftIssue?.id === issue.id }))
+      .sort((a, b) => Number(b.raisedHere) - Number(a.raisedHere)),
+  });
   return {
     issue,
-    linked: await Promise.all(linked.map(withPlans)),
+    linked: await Promise.all(linked.map(withDetails)),
     available: others.map(describeContract).map(({ id, name, chainName, address }) => ({ id, name, chainName, address })),
   };
 }
@@ -254,6 +262,46 @@ resolver.define(
     const issue = panelIssue(context);
     await removePlannedChange(payload?.contractId, issue.id, String(payload?.field || ''));
     return issuePanel(issue);
+  })
+);
+
+// A change on a contract linked to the issue the panel is on. Anything else is refused, so the
+// panel can only act on what it shows.
+async function panelChange(issue, changeId) {
+  const change = await getChange(String(changeId || ''));
+  if (!change) throw new RegistryError('This change no longer exists.');
+  const { linked } = await contractsForIssue(issue.id);
+  if (!linked.some((contract) => contract.id === change.contractId)) {
+    throw new RegistryError('This change is on a contract that is not linked to this issue.');
+  }
+  return change;
+}
+
+// Reconciles from the issue panel. Without an issue key, the issue the panel is on explains the
+// change; a drift issue cannot explain its own change.
+resolver.define(
+  'reconcileFromPanel',
+  safely(async ({ payload, context }) => {
+    const here = panelIssue(context);
+    const change = await panelChange(here, payload?.changeId);
+    const issue = payload?.issueKey ? await requireVisibleIssue(payload.issueKey) : here;
+    if (change.driftIssue?.id === issue.id) {
+      throw new RegistryError(
+        `${issue.key} was raised by Onveris for this change, so it can't explain it. Name the issue that planned the change, or acknowledge it.`
+      );
+    }
+    await reconcileWithIssue(change.id, issue, context?.accountId);
+    return issuePanel(here);
+  })
+);
+
+resolver.define(
+  'acknowledgeFromPanel',
+  safely(async ({ payload, context }) => {
+    const here = panelIssue(context);
+    const change = await panelChange(here, payload?.changeId);
+    await acknowledgeChange(change.id, payload?.note, context?.accountId);
+    return issuePanel(here);
   })
 );
 
