@@ -7,6 +7,15 @@ const ISSUE_ID = /^\d+$/;
 
 export const isIssueKey = (value) => typeof value === 'string' && ISSUE_KEY.test(value);
 
+// Pulls an issue key out of what a person typed or pasted: a key ("ops-12"), an issue link
+// (".../browse/OPS-12"), or a key with text around it. Returns the key in capitals, or null.
+export function extractIssueKey(input) {
+  const raw = String(input ?? '').trim();
+  const fromLink = raw.match(/\/browse\/([A-Za-z][A-Za-z0-9_]*-\d+)/);
+  const match = fromLink ? fromLink[1] : raw.match(/\b([A-Za-z][A-Za-z0-9_]*-\d+)\b/)?.[1];
+  return match ? match.toUpperCase() : null;
+}
+
 const summarize = (issue) => ({
   id: String(issue.id),
   key: issue.key,

@@ -278,7 +278,7 @@ const LinkedIssues = ({ contractId }) => {
       {data && (
         <Inline space="space.100" alignBlock="end">
           <Box xcss={filterBox}>
-            <Label labelFor="link-issue-key">Issue key</Label>
+            <Label labelFor="link-issue-key">Issue key or link</Label>
             <Textfield
               id="link-issue-key"
               placeholder="For example: OPS-12"
@@ -395,7 +395,7 @@ const ReconcileModal = ({ change, mode, onClose, onDone }) => {
             </SectionMessage>
           )}
           <Box>
-            <Label labelFor="reconcile-text">{linking ? 'Issue key' : 'Note'}</Label>
+            <Label labelFor="reconcile-text">{linking ? 'Issue key or link' : 'Note'}</Label>
             <Textfield
               id="reconcile-text"
               placeholder={linking ? 'For example: OPS-12' : 'For example: Emergency fix agreed in the incident call'}

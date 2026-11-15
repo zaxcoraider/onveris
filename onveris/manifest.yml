@@ -29,35 +29,113 @@ modules:
   rovo:agent:
     - key: onveris-agent
       name: Onveris
-      description: Reads the live state of smart contracts straight from the blockchain.
+      description: Answers questions about your team's registered smart contracts and what changed on chain.
       prompt: |
         You are Onveris, an assistant for teams that build and operate smart contracts.
-        You report what is actually on the blockchain, read live through your actions.
+        Onveris keeps a registry of the team's contracts, records what each one should look like
+        (implementation, proxy admin, beacon, owner, code fingerprint), checks the chain about
+        every five minutes, and records every difference as a change.
+
+        Which action to use:
+        - Questions about "our" contracts, the registry, or a contract by name: list-contracts
+          or contract-status.
+        - "What changed", "anything unapproved", "this week": recent-changes. Unrecorded changes
+          are the ones that matter most; say so first.
+        - A contract that is not registered, or a raw address with a chain: read-contract.
 
         Rules:
-        - Never state a contract's implementation, admin, owner or code from memory.
-          Always call the read-contract action and report what it returns.
-        - If the user gives an address without a chain, ask which chain.
+        - Never state a contract's implementation, admin, owner or code from memory. Report only
+          what the actions return, and say when it was last checked.
+        - If an address is given without a chain, ask which chain.
           Supported chains: ethereum, base, arbitrum, optimism, polygon, sepolia.
-        - If the action says the chain could not be reached, say so plainly and do not guess.
-          An unreachable chain is not evidence that anything changed.
-        - Give addresses in full. Mention the block the data was read at and include the explorer link.
-        - Explain terms briefly for readers new to blockchains: a proxy is a contract whose
-          code can be swapped; the implementation is the code it currently runs; the admin
-          or owner is who can change it.
-        - You only read public data. You cannot send transactions, hold keys or move funds.
+        - "Unreachable" means Onveris could not read the chain. It is not evidence that anything
+          changed; say so plainly and do not guess.
+        - The actions do not name Jira issues. If an issue was raised for a change, say that one
+          exists and that it can be seen by opening the contract in Onveris from the Jira Apps menu.
+        - Give addresses in full and include explorer or transaction links when returned.
+        - Explain terms briefly for readers new to blockchains: a proxy is a contract whose code can
+          be swapped; the implementation is the code it currently runs; the admin or owner is who
+          can change it.
+        - You only read. You cannot register contracts, reconcile changes, send transactions, hold
+          keys or move funds. For those, point to Onveris in Jira.
       conversationStarters:
+        - Has anything changed on our contracts this week?
+        - Which contracts have unrecorded changes?
         - What is the current implementation of a contract?
-        - Who owns this contract?
-        - Is this address an upgradeable proxy?
       actions:
+        - list-contracts
+        - contract-status
+        - recent-changes
         - read-contract
   rovo:mcp:
     - key: onveris-mcp
       name: Onveris
       tools:
+        - list-contracts
+        - contract-status
+        - recent-changes
         - read-contract
   action:
+    - key: list-contracts
+      name: List registered contracts
+      function: listContractsAction
+      actionVerb: GET
+      description: >
+        List the smart contracts registered in Onveris with their status (in sync, drift or
+        unreachable) and when each was last checked, plus totals. Can be narrowed by chain or status.
+      inputs:
+        chain:
+          title: Chain
+          type: string
+          required: false
+          description: "Optional. One of: ethereum, base, arbitrum, optimism, polygon, sepolia"
+        status:
+          title: Status
+          type: string
+          required: false
+          description: "Optional. One of: in sync, drift, unreachable"
+    - key: contract-status
+      name: Get contract status
+      function: contractStatusAction
+      actionVerb: GET
+      description: >
+        Get the status of one registered contract: its recorded values next to the values last
+        read from the chain, whether they match, and any changes not yet reconciled.
+      inputs:
+        contract:
+          title: Contract
+          type: string
+          required: true
+          description: "The contract's name in Onveris, or its address (0x followed by 40 hexadecimal characters)"
+        chain:
+          title: Chain
+          type: string
+          required: false
+          description: "Optional, to tell apart contracts with the same name or address on different chains"
+    - key: recent-changes
+      name: List recent changes
+      function: recentChangesAction
+      actionVerb: GET
+      description: >
+        List changes Onveris detected on registered contracts in the last few days, newest first:
+        what changed, before and after values, and whether each was planned, reconciled,
+        acknowledged or is still unrecorded.
+      inputs:
+        days:
+          title: Days
+          type: integer
+          required: false
+          description: "Optional. How many days back to look. Defaults to 7."
+        contract:
+          title: Contract
+          type: string
+          required: false
+          description: "Optional. Limit to one contract, by name or address"
+        chain:
+          title: Chain
+          type: string
+          required: false
+          description: "Optional. Used with contract to tell apart contracts on different chains"
     - key: read-contract
       name: Read contract state
       function: readContractAction
@@ -103,6 +181,12 @@ modules:
       handler: index.onConnectionChangeHandler
     - key: readContractAction
       handler: index.readContractAction
+    - key: listContractsAction
+      handler: index.listContractsAction
+    - key: contractStatusAction
+      handler: index.contractStatusAction
+    - key: recentChangesAction
+      handler: index.recentChangesAction
 resources:
   - key: main
     path: src/frontend/index.jsx

@@ -14,7 +14,7 @@ import {
   linkedIssueIds,
   contractsForIssue,
 } from '../services/registry.js';
-import { findIssue, findVisibleIssues, isIssueKey } from '../services/issues.js';
+import { findIssue, findVisibleIssues, extractIssueKey } from '../services/issues.js';
 import {
   checkAndRecord,
   checkAllAndRecord,
@@ -87,8 +87,8 @@ async function registryView() {
 }
 
 async function requireVisibleIssue(issueKey) {
-  const key = String(issueKey || '').trim().toUpperCase();
-  if (!isIssueKey(key)) throw new RegistryError('Enter an issue key, for example OPS-12.');
+  const key = extractIssueKey(issueKey);
+  if (!key) throw new RegistryError('Enter an issue key or paste the issue link, for example OPS-12.');
   const issue = await findIssue(key);
   if (!issue) throw new RegistryError(`Couldn't find ${key}. Check the key, and that you can view the issue.`);
   return issue;
