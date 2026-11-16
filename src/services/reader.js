@@ -34,12 +34,28 @@ function wordToAddress(word) {
   return '0x' + word.slice(26).toLowerCase();
 }
 
+// What an endpoint's error to the owner() call says about the contract:
+//   'execution'  the call ran and failed, so the contract has no usable owner(): a normal outcome
+//   'transient'  the endpoint could not serve the call just now: a failed read
+//   'unclear'    neither is certain
+// Getting this wrong in one direction leaves a contract unreachable for good; in the other it
+// reports the owner as gone when only the endpoint stumbled. Hence the middle answer.
+const EXECUTION_ERROR = /revert|invalid opcode|invalid jump|bad jump|bad instruction|invalid instruction|opcode|out of gas|stack (under|over)flow|vm exception|evm error|execution/i;
+const TRANSIENT_ERROR = /rate|limit|too many|quota|exceeded|capacity|busy|overload|unavailable|try again|time[d ]*out|timeout|missing trie|header not found|unknown block|not found|internal|unauthori[sz]ed|forbidden|denied/i;
+
+export function classifyCallError(error) {
+  const message = String(error?.message || '');
+  if (error?.code === 3 || EXECUTION_ERROR.test(message)) return 'execution';
+  if (TRANSIENT_ERROR.test(message)) return 'transient';
+  return 'unclear';
+}
+
 // Reads the current state of a contract. Throws ChainUnreachableError if the chain cannot be read.
 export async function readContract(chainKey, address) {
   if (!isAddress(address)) throw new Error('Not a valid contract address');
   const target = address.toLowerCase();
 
-  const calls = [
+  const baseCalls = [
     { method: 'eth_blockNumber', params: [] },
     { method: 'eth_getCode', params: [target, 'latest'] },
     { method: 'eth_getStorageAt', params: [target, SLOTS.eip1967Implementation, 'latest'] },
@@ -48,29 +64,38 @@ export async function readContract(chainKey, address) {
     { method: 'eth_getStorageAt', params: [target, SLOTS.legacyImplementation, 'latest'] },
     { method: 'eth_getStorageAt', params: [target, SLOTS.legacyAdmin, 'latest'] },
   ];
-  const { results, endpoint } = await rpcBatch(chainKey, calls);
-  const [blockHex, code, implWord, adminWord, beaconWord, legacyImplWord, legacyAdminWord] = results;
+  // owner() is optional and is asked in the same batch, so the endpoint's other answers show
+  // it is working. An execution failure means the contract has no owner function, which is a
+  // normal outcome. A transient error fails the endpoint and the next one is tried.
+  const OWNER_CALL = baseCalls.length;
+  const calls = [...baseCalls, { method: 'eth_call', params: [{ to: target, data: OWNER_SELECTOR }, 'latest'] }];
+  let unclear = 0;
+  const acceptOwnerError = (error) => {
+    const kind = classifyCallError(error);
+    if (kind === 'unclear') unclear += 1;
+    return kind === 'execution';
+  };
+
+  let read;
+  try {
+    read = await rpcBatch(chainKey, calls, { [OWNER_CALL]: acceptOwnerError });
+  } catch (error) {
+    // An unclear error is not trusted from one endpoint. When every endpoint answered the
+    // rest and each failed owner() in its own way, the call is what fails, not the chain:
+    // read the rest without it. Anything else is a failed read.
+    if (error.name !== 'ChainUnreachableError' || unclear === 0 || unclear !== error.attempts.length) throw error;
+    read = await rpcBatch(chainKey, baseCalls);
+    read.results.push(null);
+  }
+  const { results, endpoint } = read;
+  const [blockHex, code, implWord, adminWord, beaconWord, legacyImplWord, legacyAdminWord, ownerWord] = results;
 
   const hasCode = typeof code === 'string' && code.length > 2;
   const implementation = wordToAddress(implWord) || wordToAddress(legacyImplWord);
   const admin = wordToAddress(adminWord) || wordToAddress(legacyAdminWord);
   const beacon = wordToAddress(beaconWord);
 
-  // owner() is optional. A revert or empty answer means the contract has no owner function,
-  // which is a normal outcome and not a failed read.
-  let owner = null;
-  if (hasCode) {
-    try {
-      const { results: ownerResults } = await rpcBatch(chainKey, [
-        { method: 'eth_call', params: [{ to: target, data: OWNER_SELECTOR }, 'latest'] },
-      ]);
-      owner = wordToAddress(ownerResults[0]);
-    } catch (error) {
-      if (error.name === 'ChainUnreachableError' && error.attempts.every((a) => !/revert|execution/i.test(a.reason))) {
-        throw error;
-      }
-    }
-  }
+  const owner = hasCode ? wordToAddress(ownerWord) : null;
 
   return {
     chain: chainKey,

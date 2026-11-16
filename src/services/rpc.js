@@ -15,7 +15,9 @@ export class ChainUnreachableError extends Error {
 
 let nextId = 1;
 
-async function callEndpoint(endpoint, calls) {
+// `optional` maps a call's position to a test of its error. Where the endpoint answers that
+// call with an error the test accepts, the call's result is null and the batch still stands.
+async function callEndpoint(endpoint, calls, optional = {}) {
   const body = calls.map(({ method, params }) => ({ jsonrpc: '2.0', id: nextId++, method, params }));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -32,10 +34,13 @@ async function callEndpoint(endpoint, calls) {
       throw new Error('unexpected batch response');
     }
     const byId = new Map(payload.map((item) => [item.id, item]));
-    return body.map((request) => {
+    return body.map((request, index) => {
       const item = byId.get(request.id);
       if (!item) throw new Error('missing result in batch');
-      if (item.error) throw new Error(item.error.message || 'RPC error');
+      if (item.error) {
+        if (optional[index]?.(item.error)) return null;
+        throw new Error(item.error.message || 'RPC error');
+      }
       return item.result;
     });
   } finally {
@@ -45,12 +50,12 @@ async function callEndpoint(endpoint, calls) {
 
 // Sends a batch of read calls to the chain, trying each endpoint in order.
 // All results in a batch come from the same endpoint, so they are consistent with each other.
-export async function rpcBatch(chainKey, calls) {
+export async function rpcBatch(chainKey, calls, optional = {}) {
   const chain = getChain(chainKey);
   const attempts = [];
   for (const endpoint of chain.endpoints) {
     try {
-      const results = await callEndpoint(endpoint, calls);
+      const results = await callEndpoint(endpoint, calls, optional);
       return { results, endpoint };
     } catch (error) {
       attempts.push({ endpoint, reason: error.name === 'AbortError' ? 'timed out' : error.message });
