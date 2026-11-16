@@ -23,8 +23,17 @@ import { STATUS, StatusLozenge, call, shorten, timeAgo } from './shared.jsx';
 const CHAIN_OPTIONS = listChains().map(({ key, name }) => ({ label: name, value: key }));
 const STATUS_OPTIONS = Object.entries(STATUS).map(([value, { label }]) => ({ label, value }));
 
+// Macro config Selects cannot be cleared (isClearable is not available there), so each one
+// starts with an explicit "All" option that means no filter.
+const ALL = 'all';
+const CHAIN_CHOICES = [{ label: 'All chains', value: ALL }, ...CHAIN_OPTIONS];
+const STATUS_CHOICES = [{ label: 'All statuses', value: ALL }, ...STATUS_OPTIONS];
+
 // A Select in the macro config may be stored as the option or as its value.
-const configValue = (value) => (value && typeof value === 'object' ? value.value : value) || null;
+const configValue = (value) => {
+  const raw = (value && typeof value === 'object' ? value.value : value) || null;
+  return raw === ALL ? null : raw;
+};
 
 // What the contract currently runs, or failing that who controls it.
 const currentState = ({ observed }) => {
@@ -46,9 +55,9 @@ const summaryText = (contracts) => {
 const Config = () => (
   <>
     <Label>Chain</Label>
-    <Select name="chain" options={CHAIN_OPTIONS} placeholder="All chains" />
+    <Select name="chain" options={CHAIN_CHOICES} placeholder="All chains" />
     <Label>Status</Label>
-    <Select name="status" options={STATUS_OPTIONS} placeholder="All statuses" />
+    <Select name="status" options={STATUS_CHOICES} placeholder="All statuses" />
   </>
 );
 

@@ -2,7 +2,7 @@
 
 **Your Jira says one thing. The blockchain says another. Onveris tells you when, and opens the ticket.**
 
-Onveris is an Atlassian Forge app for teams that run smart contracts. It keeps the team's record of each contract in Jira true to what is actually on the chain. When a contract changes and no Jira issue explains why, Onveris raises one.
+Onveris is an Atlassian Forge app for teams that run smart contracts. It keeps the team's record of each contract in Jira and Confluence true to what is actually on the chain. When a contract changes and no Jira issue explains why, Onveris raises one.
 
 It only reads public blockchain data. It holds no keys, connects to no wallet and cannot send transactions.
 
@@ -31,7 +31,8 @@ No blockchain knowledge is needed to see the risk: it is an unapproved change to
 | **Opens a Jira issue** | A change that no issue announced raises an issue in the project you choose, explaining what changed and what to do. |
 | **Knows planned work** | An issue can declare in advance that it will change a contract. When that change lands, it is matched to the issue and nothing is raised. |
 | **Closes the loop** | Link a change to the issue that explains it, or acknowledge it with a note. The record updates, the change goes into the contract's history, and Onveris comments on and closes its issue. |
-| **Shows it in context** | A panel on any Jira issue shows the live state of the contracts it concerns. |
+| **Shows it in context** | A panel on any Jira issue shows the live state of the contracts it concerns, and lets you reconcile their open changes right there: "this issue explains it", link another issue, or acknowledge. |
+| **Keeps docs live** | A Confluence macro puts a live table of the registered contracts on any page, filtered by chain and status, so deployment pages never go stale. |
 | **Answers questions** | A Rovo agent answers "has anything changed this week?" from the registry, and the same tools are available to other AI agents over the Atlassian MCP server. |
 
 ### Built not to cry wolf
@@ -42,15 +43,18 @@ No blockchain knowledge is needed to see the risk: it is an unapproved change to
 
 ## Try it in five minutes
 
-You need a Jira Cloud site where you can install apps and are a Jira admin.
+You need a Jira Cloud site where you can install apps and are a Jira admin. Confluence on the same site is optional (step 7).
 
-1. **Install** Onveris from the install link in the Devpost submission.
+1. **Install** Onveris in Jira from the install link in the Devpost submission.
 2. **Load samples.** Open **Apps > Onveris** in Jira and choose **Load sample contracts**. Eight well-known public contracts on five chains are read live and appear *In sync*.
 3. **Choose where issues go.** Open **Settings (⚙️) > Apps**, choose **Onveris** in the left menu, pick a project and save.
 4. **Cause a change.** Open any sample contract, choose **Edit record** on the *Proxy admin* row, change the last character and choose **Save and check**. Onveris shows **Drift**, records the change and opens a Jira issue for it.
 5. **Reconcile it.** Choose **Acknowledge**, add a note and confirm. The contract is back *In sync*, the change is in **History**, and the Jira issue gets a comment and is closed.
-6. **See it on an issue.** Open any Jira issue, open the **Onveris** panel from the apps button under the title, and link a contract. Choose **Declare change**, pick **Proxy admin** and declare it. Then repeat step 4 on that contract: this time the change is recognised as planned and no issue is raised.
-7. **Ask Rovo** (if your site has it). Open Rovo Chat, choose the **Onveris** agent and ask *"Has anything changed this week?"*
+6. **Work from an issue.** Open any Jira issue and choose **Onveris** in the row of app buttons under the title. Link a contract.
+   - **Reconcile from the issue:** repeat step 4 on that contract. The panel now lists the open change; choose **… explains it** (the button carries this issue's key). The change is linked to the issue and the contract is back *In sync*.
+   - **Plan ahead:** choose **Declare change**, pick **Proxy admin** and declare it. Repeat step 4 once more: this time the change is recognised as planned and no issue is raised.
+7. **Put it in Confluence** (optional). Onveris is installed in Jira first; to use it in Confluence on the same site, connect it there from [Atlassian Administration](https://admin.atlassian.com) under **Apps** (your site's connected apps). Then edit any page, type `/Onveris contracts` (or use **+** in the toolbar) and publish. The table shows every registered contract with its live status; choose **Edit** on the macro to filter by chain or status.
+8. **Ask Rovo** (if your site has it). Open Rovo Chat, choose the **Onveris** agent and ask *"Has anything changed this week?"*
 
 Editing the record is the same as the chain changing under you: Onveris cannot tell the difference, so the full flow can be tried without touching a blockchain.
 
@@ -81,4 +85,4 @@ This repository is the Forge app itself: [`manifest.yml`](manifest.yml), [`src/`
 
 ## Status
 
-Working today: everything above. Still to come before the deadline: live updates to the Teamwork Graph, and a Confluence macro with a live deployment table. Onveris knows the changes it has seen since a contract was registered; older history is not available from free public endpoints.
+Working today: everything above. Still to come before the deadline: live updates to the Teamwork Graph, and linking contracts to Confluence pages. Onveris knows the changes it has seen since a contract was registered; older history is not available from free public endpoints.
