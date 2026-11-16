@@ -83,14 +83,14 @@ const DeclareChange = ({ contract, fields, busy, onDeclare, onCancel }) => {
   );
 };
 
-const PlannedChange = ({ plan, busy, onRemove }) => (
+const PlannedChange = ({ plan, busy, canManage, onRemove }) => (
   <Inline space="space.100" alignBlock="center" spread="space-between">
     <Text>
       Planned change: {plan.label.toLowerCase()}
       {plan.expectedValue ? ` to ${shorten(plan.expectedValue)}` : ''} ·{' '}
       {plan.status === 'matched' ? `seen on the chain ${timeAgo(plan.matchedAt)}` : 'waiting to be seen on the chain'}
     </Text>
-    {plan.status === 'open' && (
+    {canManage && plan.status === 'open' && (
       <Button appearance="subtle" spacing="compact" isDisabled={busy !== null} onClick={onRemove}>
         Remove
       </Button>
@@ -247,6 +247,7 @@ const LinkedContract = ({ contract, issueKey, fields, busy, canManage, onUnlink,
         key={plan.field}
         plan={plan}
         busy={busy}
+        canManage={canManage}
         onRemove={() => onRemovePlan(contract.id, plan.field)}
       />
     ))}
@@ -260,12 +261,16 @@ const LinkedContract = ({ contract, issueKey, fields, busy, canManage, onUnlink,
           if (await onDeclare(...args)) setDeclaring(false);
         }}
       />
-    ) : (
+    ) : canManage ? (
       <Box>
         <Button spacing="compact" isDisabled={busy !== null} onClick={() => setDeclaring(true)}>
           Declare change
         </Button>
       </Box>
+    ) : (
+      <Text color="color.text.subtle">
+        A Jira admin can declare a change this issue plans, so it raises no alarm when it lands.
+      </Text>
     )}
   </Stack>
   );

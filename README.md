@@ -40,7 +40,7 @@ No blockchain knowledge is needed to see the risk: it is an unapproved change to
 - **A failed read is never reported as a change.** If a chain cannot be reached, the contract shows as *unreachable* with its last known values, and nothing is raised.
 - **Two checks never raise the same issue twice.** Recording a change takes a short per-contract claim in storage.
 - **People only see issues and pages they are allowed to see.** Linked issues and Confluence pages are read as the person looking.
-- **Only Jira admins can change what counts as true.** Registering or removing a contract, editing its record and reconciling a change are checked against Jira on the server. Everyone else can look, link issues and pages, and declare planned changes on their own issues.
+- **Only Jira admins can change what counts as true.** Registering or removing a contract, editing its record, reconciling a change and declaring a planned change are checked against Jira on the server. Everyone else can look, run a check, and link issues and pages.
 - **No personal data is stored.** Onveris keeps public chain data and links to issues and pages, and no user identifiers.
 
 ## Try it in five minutes

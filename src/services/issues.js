@@ -78,20 +78,19 @@ export function formatTime(iso) {
 }
 
 // The address of the Onveris page on this site, or null if it cannot be worked out.
-// Runs as the app, so it also works from the scheduled checker.
-let pageUrl;
+// Runs as the app, so it also works from the scheduled checker. Asked afresh every time:
+// Forge can reuse a running function for another site, so a remembered address could put
+// one site's address into another site's issues.
 async function onverisPageUrl() {
-  if (pageUrl !== undefined) return pageUrl;
   try {
     const { appAri, environmentAri } = getAppContext();
     const response = await api.asApp().requestJira(route`/rest/api/3/serverInfo`, { headers: json });
     const { baseUrl } = response.ok ? await response.json() : {};
-    pageUrl = baseUrl ? `${baseUrl}/jira/apps/${appAri.appId}/${environmentAri.environmentId}` : null;
+    return baseUrl ? `${baseUrl}/jira/apps/${appAri.appId}/${environmentAri.environmentId}` : null;
   } catch (error) {
     console.warn(`[issues] could not work out the Onveris page address: ${error.message}`);
-    pageUrl = null;
+    return null;
   }
-  return pageUrl;
 }
 
 const paragraph = (...content) => ({ type: 'paragraph', content });

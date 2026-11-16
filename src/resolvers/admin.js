@@ -3,9 +3,11 @@ import { NeedsAuthenticationError } from '@forge/api';
 import { listProjects, pickIssueType } from '../services/issues.js';
 import { getSettings, saveSettings } from '../storage/settings.js';
 import { getStatus } from '../services/status.js';
+import { requireAdmin } from '../services/access.js';
 
 // Handlers for the settings page. This function is wired only to the Jira admin page, which
-// Jira shows to administrators alone, and each handler also refuses any other module.
+// Jira shows to administrators alone. Each handler also refuses any other module, and asks
+// Jira itself whether the caller is an admin, so nothing rests on where the page is shown.
 
 const resolver = new Resolver();
 
@@ -14,10 +16,12 @@ const adminOnly = (handler) => async (request) => {
     if (request.context?.extension?.type !== 'jira:adminPage') {
       return { ok: false, message: 'Settings can only be changed from Jira administration.' };
     }
+    await requireAdmin();
     return { ok: true, ...(await handler(request)) };
   } catch (error) {
     // Forge uses this error to ask the user for consent; swallowing it would hide the prompt.
     if (error instanceof NeedsAuthenticationError) throw error;
+    if (error.name === 'RegistryError') return { ok: false, message: error.message };
     console.error(error);
     return { ok: false, message: 'Something went wrong. Try again.' };
   }

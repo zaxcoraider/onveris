@@ -304,7 +304,7 @@ resolver.define(
 
 resolver.define(
   'declarePlannedChange',
-  safely(async ({ payload, context }) => {
+  adminOnly(async ({ payload, context }) => {
     const issue = panelIssue(context);
     await declarePlannedChange(payload?.contractId, issue, payload?.field, payload?.expectedValue);
     return issuePanel(issue);
@@ -313,7 +313,7 @@ resolver.define(
 
 resolver.define(
   'removePlannedChange',
-  safely(async ({ payload, context }) => {
+  adminOnly(async ({ payload, context }) => {
     const issue = panelIssue(context);
     await removePlannedChange(payload?.contractId, issue.id, String(payload?.field || ''));
     return issuePanel(issue);
