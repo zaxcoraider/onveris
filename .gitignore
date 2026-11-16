@@ -62,3 +62,6 @@ hardhat.config.local.*
 
 # Security review output: local only
 /security-audit-artifacts/
+
+# Install link for judges: goes in the Devpost form, kept local
+/install-link.txt
