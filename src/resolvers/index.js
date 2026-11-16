@@ -12,9 +12,13 @@ import {
   linkIssue,
   unlinkIssue,
   linkedIssueIds,
+  linkPage,
+  unlinkPage,
+  linkedPageIds,
   contractsForIssue,
 } from '../services/registry.js';
 import { findIssue, findVisibleIssues, extractIssueKey } from '../services/issues.js';
+import { extractPageId, findPage, findVisiblePages } from '../services/pages.js';
 import {
   checkAndRecord,
   checkAllAndRecord,
@@ -189,6 +193,38 @@ resolver.define(
     if (!issue) throw new RegistryError("Couldn't find that issue. You may not have permission to view it.");
     await unlinkIssue(payload?.id, issue.id);
     return findVisibleIssues(await linkedIssueIds(payload?.id));
+  })
+);
+
+// Confluence pages linked to a contract, limited to the ones the current user can view. With
+// nothing linked, Confluence is not asked at all, so a Jira-only site never sees an error here.
+async function contractPages(id) {
+  const ids = await linkedPageIds(id);
+  return ids.length ? findVisiblePages(ids) : { pages: [], hidden: 0 };
+}
+
+resolver.define('getContractPages', safely(async ({ payload }) => contractPages(payload?.id)));
+
+resolver.define(
+  'linkPageByLink',
+  safely(async ({ payload, context }) => {
+    const pageId = extractPageId(payload?.pageLink);
+    if (!pageId) throw new RegistryError('Paste the link to a Confluence page, or its page id.');
+    const page = await findPage(pageId);
+    if (!page) throw new RegistryError("Couldn't find that page. Check the link, and that you can view the page.");
+    await linkPage(payload?.id, page, context?.accountId);
+    return contractPages(payload?.id);
+  })
+);
+
+resolver.define(
+  'unlinkPage',
+  safely(async ({ payload }) => {
+    // Only someone who can view the page may remove its link.
+    const page = await findPage(String(payload?.pageId || ''));
+    if (!page) throw new RegistryError("Couldn't find that page. You may not have permission to view it.");
+    await unlinkPage(payload?.id, page.id);
+    return contractPages(payload?.id);
   })
 );
 

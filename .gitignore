@@ -56,3 +56,6 @@ artifacts/
 out/
 .foundry/
 hardhat.config.local.*
+
+# Sepolia test contract and its steps: local only
+/sepolia-demo/

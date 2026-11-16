@@ -26,7 +26,7 @@ No blockchain knowledge is needed to see the risk: it is an unapproved change to
 
 | | |
 |---|---|
-| **Records each contract** | Register a contract by chain and address. Onveris reads it from the chain and records which code it runs, who can change it, and a fingerprint of its code. |
+| **Records each contract** | Register a contract by chain and address. Onveris reads it from the chain and records which code it runs, who can change it, and a fingerprint of its code. Link the Jira issues that plan its changes and the Confluence pages that document it. |
 | **Watches the chain** | Every five minutes it compares the chain with the record. Any difference becomes a change, with before and after values and the transaction when the chain identifies it. |
 | **Opens a Jira issue** | A change that no issue announced raises an issue in the project you choose, explaining what changed and what to do. |
 | **Knows planned work** | An issue can declare in advance that it will change a contract. When that change lands, it is matched to the issue and nothing is raised. |
@@ -39,7 +39,7 @@ No blockchain knowledge is needed to see the risk: it is an unapproved change to
 
 - **A failed read is never reported as a change.** If a chain cannot be reached, the contract shows as *unreachable* with its last known values, and nothing is raised.
 - **Two checks never raise the same issue twice.** Recording a change takes a short per-contract claim in storage.
-- **People only see issues they are allowed to see.** Linked issues are read from Jira as the person looking.
+- **People only see issues and pages they are allowed to see.** Linked issues and Confluence pages are read as the person looking.
 
 ## Try it in five minutes
 
@@ -85,4 +85,4 @@ This repository is the Forge app itself: [`manifest.yml`](manifest.yml), [`src/`
 
 ## Status
 
-Working today: everything above. Still to come before the deadline: live updates to the Teamwork Graph, and linking contracts to Confluence pages. Onveris knows the changes it has seen since a contract was registered; older history is not available from free public endpoints.
+Working today: everything above. Still to come before the deadline: live updates to the Teamwork Graph. Onveris knows the changes it has seen since a contract was registered; older history is not available from free public endpoints.

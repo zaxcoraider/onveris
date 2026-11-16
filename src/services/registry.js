@@ -15,6 +15,7 @@ export const TRACKED_FIELDS = [
 
 const NAME_MAX = 80;
 const MAX_LINKED_ISSUES = 50;
+const MAX_LINKED_PAGES = 50;
 
 // A problem the user can fix. The message is safe to show as-is.
 export class RegistryError extends Error {
@@ -93,6 +94,7 @@ export async function registerContract(input, accountId, extra = {}) {
     lastBlock: state.blockNumber,
     lastError: null,
     linkedIssues: [],
+    linkedPages: [],
     sample: Boolean(extra.sample),
     createdBy: accountId || null,
     createdAt: state.readAt,
@@ -189,6 +191,29 @@ export async function unlinkIssue(id, issueId) {
 
 export const linkedIssueIds = async (id) => ((await requireContract(id)).linkedIssues || []).map((link) => link.id);
 
+// Links a contract to the Confluence page that documents it. The caller must already have
+// confirmed that the current user can view the page. Linking twice is harmless.
+export async function linkPage(id, page, accountId) {
+  const contract = await requireContract(id);
+  const links = contract.linkedPages || [];
+  if (links.some((link) => link.id === page.id)) return contract;
+  if (links.length >= MAX_LINKED_PAGES) {
+    throw new RegistryError(`A contract can be linked to at most ${MAX_LINKED_PAGES} pages. Unlink one first.`);
+  }
+  contract.linkedPages = [...links, { id: page.id, linkedBy: accountId || null, linkedAt: new Date().toISOString() }];
+  await saveContract(contract);
+  return contract;
+}
+
+export async function unlinkPage(id, pageId) {
+  const contract = await requireContract(id);
+  contract.linkedPages = (contract.linkedPages || []).filter((link) => link.id !== String(pageId));
+  await saveContract(contract);
+  return contract;
+}
+
+export const linkedPageIds = async (id) => ((await requireContract(id)).linkedPages || []).map((link) => link.id);
+
 // Every registered contract, split by whether it is linked to the given issue.
 export async function contractsForIssue(issueId) {
   const all = await listContracts();
@@ -196,11 +221,12 @@ export async function contractsForIssue(issueId) {
   return { linked: all.filter(isLinked), others: all.filter((contract) => !isLinked(contract)) };
 }
 
-// What the UI receives. Linked issues are reduced to a count here: which issues they are is
-// only ever sent after checking that the current user can view them.
-const withDetails = ({ linkedIssues, ...contract }) => ({
+// What the UI receives. Linked issues and pages are reduced to counts here: which ones they are
+// is only ever sent after checking that the current user can view them.
+const withDetails = ({ linkedIssues, linkedPages, ...contract }) => ({
   ...contract,
   linkedIssueCount: (linkedIssues || []).length,
+  linkedPageCount: (linkedPages || []).length,
   chainName: CHAINS[contract.chain]?.name || contract.chain,
   explorerUrl: CHAINS[contract.chain] ? `${CHAINS[contract.chain].explorer}/address/${contract.address}` : null,
   differences: findDifferences(contract.baseline, contract.observed),

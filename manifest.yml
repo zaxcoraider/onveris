@@ -218,6 +218,8 @@ permissions:
     - read:jira-work
     # Create an issue when a contract changes with nothing to explain it.
     - write:jira-work
+    # Read the Confluence pages linked to a contract, as the current user.
+    - read:page:confluence
   external:
     fetch:
       backend:

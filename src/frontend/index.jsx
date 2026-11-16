@@ -29,6 +29,7 @@ import { invoke } from '@forge/bridge';
 import { CHANGE_STATUS, KIND_LABEL, STATUS, StatusLozenge, call, shorten, timeAgo } from './shared.jsx';
 
 const filterBox = xcss({ width: '220px' });
+const pageLinkBox = xcss({ width: '360px' });
 const STATUS_OPTIONS = Object.entries(STATUS).map(([value, { label }]) => ({ label, value }));
 
 const RegisterModal = ({ chains, fields, onClose, onRegistered }) => {
@@ -288,6 +289,104 @@ const LinkedIssues = ({ contractId }) => {
           </Box>
           <LoadingButton onClick={link} isLoading={busy} isDisabled={!issueKey.trim()}>
             Link issue
+          </LoadingButton>
+        </Inline>
+      )}
+    </Stack>
+  );
+};
+
+// Confluence pages that document a contract. The backend only returns pages the current user can view.
+const LinkedPages = ({ contractId }) => {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [pageLink, setPageLink] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const apply = (result) => {
+    if (result.ok) {
+      setData(result);
+      setError(null);
+    } else {
+      setError(result.message);
+    }
+    return result.ok;
+  };
+
+  const load = useCallback(async () => apply(await call('getContractPages', { id: contractId })), [contractId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const run = async (name, payload) => {
+    setBusy(true);
+    const ok = apply(await call(name, { id: contractId, ...payload }));
+    setBusy(false);
+    return ok;
+  };
+
+  const link = async () => {
+    if (await run('linkPageByLink', { pageLink })) setPageLink('');
+  };
+
+  return (
+    <Stack space="space.150">
+      <Heading as="h2">Documentation pages</Heading>
+      {error && (
+        <SectionMessage appearance="error">
+          <Text>{error}</Text>
+        </SectionMessage>
+      )}
+      {!data && !error && <Spinner size="small" label="Loading linked pages" />}
+      {!data && error && (
+        <Box>
+          <Button onClick={load}>Retry</Button>
+        </Box>
+      )}
+      {data && data.pages.length === 0 && data.hidden === 0 && (
+        <Text>
+          No Confluence pages are linked yet. Link the pages that document this contract, such as its deployment notes
+          or audit report.
+        </Text>
+      )}
+      {data &&
+        data.pages.map((page) => (
+          <Inline key={page.id} space="space.150" alignBlock="center" spread="space-between">
+            <Text>
+              {page.url ? (
+                <Link href={page.url} openNewTab>
+                  {page.title}
+                </Link>
+              ) : (
+                page.title
+              )}
+            </Text>
+            <Button appearance="subtle" isDisabled={busy} onClick={() => run('unlinkPage', { pageId: page.id })}>
+              Unlink
+            </Button>
+          </Inline>
+        ))}
+      {data && data.hidden > 0 && (
+        <Text>
+          {data.hidden === 1
+            ? '1 more linked page is not shown because you cannot view it, or it was deleted.'
+            : `${data.hidden} more linked pages are not shown because you cannot view them, or they were deleted.`}
+        </Text>
+      )}
+      {data && (
+        <Inline space="space.100" alignBlock="end">
+          <Box xcss={pageLinkBox}>
+            <Label labelFor="link-page">Confluence page link</Label>
+            <Textfield
+              id="link-page"
+              placeholder="Paste the page's link"
+              value={pageLink}
+              onChange={(e) => setPageLink(e.target.value)}
+            />
+          </Box>
+          <LoadingButton onClick={link} isLoading={busy} isDisabled={!pageLink.trim()}>
+            Link page
           </LoadingButton>
         </Inline>
       )}
@@ -649,6 +748,8 @@ const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
       )}
 
       <LinkedIssues key={linksVersion} contractId={contract.id} />
+
+      <LinkedPages contractId={contract.id} />
 
       <Stack space="space.100">
         <Heading as="h2">History</Heading>
