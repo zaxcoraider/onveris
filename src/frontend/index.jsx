@@ -516,7 +516,7 @@ const ReconcileModal = ({ change, mode, onClose, onDone }) => {
   );
 };
 
-const OpenChange = ({ change, onReconcile }) => (
+const OpenChange = ({ change, canManage, onReconcile }) => (
   <Stack space="space.100">
     <Inline space="space.100" alignBlock="center" shouldWrap>
       <Text weight="bold">{change.label} changed</Text>
@@ -548,10 +548,14 @@ const OpenChange = ({ change, onReconcile }) => (
         review the project chosen in the Onveris settings.
       </Text>
     )}
-    <ButtonGroup>
-      <Button onClick={() => onReconcile(change, 'link')}>Link to issue</Button>
-      <Button onClick={() => onReconcile(change, 'acknowledge')}>Acknowledge</Button>
-    </ButtonGroup>
+    {canManage ? (
+      <ButtonGroup>
+        <Button onClick={() => onReconcile(change, 'link')}>Link to issue</Button>
+        <Button onClick={() => onReconcile(change, 'acknowledge')}>Acknowledge</Button>
+      </ButtonGroup>
+    ) : (
+      <Text color="color.text.subtle">A Jira admin can link this change to an issue or acknowledge it.</Text>
+    )}
   </Stack>
 );
 
@@ -601,7 +605,7 @@ const historyRows = (history) =>
     };
   });
 
-const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
+const ContractDetail = ({ contract, fields, canManage, onBack, onUpdated, onRemoved }) => {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -656,11 +660,11 @@ const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
           },
           {
             key: 'edit',
-            content: (
+            content: canManage ? (
               <Button appearance="subtle" spacing="compact" onClick={() => setEditing({ key, label })}>
                 Edit record
               </Button>
-            ),
+            ) : null,
           },
         ],
       };
@@ -697,9 +701,11 @@ const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
           <LoadingButton onClick={check} isLoading={checking}>
             Check now
           </LoadingButton>
-          <Button appearance="danger" onClick={() => setConfirmRemove(true)}>
-            Remove
-          </Button>
+          {canManage && (
+            <Button appearance="danger" onClick={() => setConfirmRemove(true)}>
+              Remove
+            </Button>
+          )}
         </ButtonGroup>
       </Inline>
 
@@ -747,7 +753,7 @@ const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
         <Stack space="space.200">
           <Heading as="h2">Open changes</Heading>
           {changes.open.map((change) => (
-            <OpenChange key={change.id} change={change} onReconcile={(target, mode) => setReconciling({ change: target, mode })} />
+            <OpenChange key={change.id} change={change} canManage={canManage} onReconcile={(target, mode) => setReconciling({ change: target, mode })} />
           ))}
         </Stack>
       )}
@@ -939,6 +945,7 @@ const App = () => {
       <ContractDetail
         contract={selected}
         fields={setup.fields}
+        canManage={setup.canManage}
         onBack={() => setSelectedId(null)}
         onUpdated={replaceContract}
         onRemoved={() => {
@@ -977,17 +984,25 @@ const App = () => {
         )}
         <EmptyState
           header="Keep your contract records true to the chain"
-          description="Register a smart contract and Onveris records its implementation, admin, owner and code. It then checks the chain and tells you when something changes. Read-only: no wallet or keys. To look around first, load a few well-known public contracts as samples."
+          description={
+            setup.canManage
+              ? 'Register a smart contract and Onveris records its implementation, admin, owner and code. It then checks the chain and tells you when something changes. Read-only: no wallet or keys. To look around first, load a few well-known public contracts as samples.'
+              : 'Onveris records which code each of your smart contracts runs and who controls it, then checks the chain and tells you when something changes. No contracts are registered yet. Ask a Jira admin to register one or to load the samples.'
+          }
           isLoading={sampleAction === 'load'}
           primaryAction={
-            <Button appearance="primary" onClick={() => setRegistering(true)} isDisabled={sampleAction !== null}>
-              Register a contract
-            </Button>
+            setup.canManage ? (
+              <Button appearance="primary" onClick={() => setRegistering(true)} isDisabled={sampleAction !== null}>
+                Register a contract
+              </Button>
+            ) : undefined
           }
           secondaryAction={
-            <Button onClick={loadSampleContracts} isDisabled={sampleAction !== null}>
-              Load sample contracts
-            </Button>
+            setup.canManage ? (
+              <Button onClick={loadSampleContracts} isDisabled={sampleAction !== null}>
+                Load sample contracts
+              </Button>
+            ) : undefined
           }
         />
         {registerModal}
@@ -1035,7 +1050,7 @@ const App = () => {
           <Text>{summaryText(registry.summary)}</Text>
         </Stack>
         <ButtonGroup>
-          {registry.contracts.some((contract) => contract.sample) && (
+          {setup.canManage && registry.contracts.some((contract) => contract.sample) && (
             <LoadingButton appearance="subtle" onClick={removeSampleContracts} isLoading={sampleAction === 'remove'}>
               Remove samples
             </LoadingButton>
@@ -1043,9 +1058,11 @@ const App = () => {
           <LoadingButton onClick={checkAll} isLoading={checkingAll}>
             Check now
           </LoadingButton>
-          <Button appearance="primary" onClick={() => setRegistering(true)}>
-            Register contract
-          </Button>
+          {setup.canManage && (
+            <Button appearance="primary" onClick={() => setRegistering(true)}>
+              Register contract
+            </Button>
+          )}
         </ButtonGroup>
       </Inline>
 

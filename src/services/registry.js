@@ -3,6 +3,7 @@ import { readContract, isAddress } from './reader.js';
 import { contractId, listContracts, getContract, saveContract, deleteContract } from '../storage/contracts.js';
 import { listChanges, deleteChange } from '../storage/changes.js';
 import { listPlanned, deletePlanned } from '../storage/planned.js';
+import { withLock } from '../storage/locks.js';
 
 // The parts of a contract's on-chain state that Onveris records and compares.
 export const TRACKED_FIELDS = [
@@ -75,7 +76,7 @@ export async function previewContract(input) {
 
 // Reads the contract from the chain and records what it finds as the baseline.
 // `extra` marks how the contract was added, for example { sample: true } from the sample loader.
-export async function registerContract(input, accountId, extra = {}) {
+export async function registerContract(input, extra = {}) {
   const { chain, address, name } = validateInput(input);
   const id = contractId(chain, address);
   const state = await readForRegistration(chain, address);
@@ -96,7 +97,6 @@ export async function registerContract(input, accountId, extra = {}) {
     linkedIssues: [],
     linkedPages: [],
     sample: Boolean(extra.sample),
-    createdBy: accountId || null,
     createdAt: state.readAt,
   };
   await saveContract(contract);
@@ -105,36 +105,64 @@ export async function registerContract(input, accountId, extra = {}) {
 
 // Re-reads one contract and updates its status. A failed read marks it unreachable and
 // keeps the last known state: it is never treated as a change on the chain.
+// Everything that loads a contract, changes it and saves it does so under one claim per
+// contract (the same one drift.js uses), so two writers never overwrite each other's work.
+// The claim is held for moments, or for a few seconds while a new change is being recorded,
+// so a short wait is nearly always enough. Returns { acquired, value }.
+const CLAIM_ATTEMPTS = 10;
+const CLAIM_WAIT_MS = 200;
+
+async function underClaim(contractId, work) {
+  for (let attempt = 1; ; attempt += 1) {
+    const result = await withLock(`contract:${contractId}`, work);
+    if (result.acquired || attempt >= CLAIM_ATTEMPTS) return result;
+    await new Promise((resolve) => setTimeout(resolve, CLAIM_WAIT_MS));
+  }
+}
+
 export async function checkContract(id) {
   const registered = await requireContract(id);
-  // The chain read is the slow part. The record is loaded again after it, so that a
-  // reconcile or an edit made in the meantime is not overwritten with what was loaded before.
-  const reload = async () => (await getContract(id)) || registered;
-  let contract = registered;
 
+  // The chain read is the slow part and happens outside the claim.
+  let state = null;
   try {
-    const state = await readContract(registered.chain, registered.address);
-    contract = await reload();
+    state = await readContract(registered.chain, registered.address);
+  } catch (error) {
+    if (error.name !== 'ChainUnreachableError') throw error;
+    console.warn(error.message);
+  }
+
+  // The record is loaded again after the read, so that a reconcile, an edit or a link made in
+  // the meantime is kept, and what was read is laid over it.
+  const apply = (contract) => {
+    if (!state) return Object.assign(contract, { status: 'unreachable', lastError: new Date().toISOString() });
     const observed = pickTracked(state);
-    const differences = findDifferences(contract.baseline, observed);
-    Object.assign(contract, {
+    return Object.assign(contract, {
       // The block of the previous successful read: a change found now happened after it.
       previousBlock: contract.lastBlock || null,
       observed,
       kind: state.kind,
-      status: differences.length > 0 ? 'drift' : 'in_sync',
+      status: findDifferences(contract.baseline, observed).length > 0 ? 'drift' : 'in_sync',
       lastCheckedAt: state.readAt,
       lastBlock: state.blockNumber,
       lastError: null,
     });
-  } catch (error) {
-    if (error.name !== 'ChainUnreachableError') throw error;
-    console.warn(error.message);
-    contract = await reload();
-    Object.assign(contract, { status: 'unreachable', lastError: new Date().toISOString() });
-  }
-  await saveContract(contract);
-  return contract;
+  };
+  const result = await underClaim(registered.id, async () => {
+    const current = await getContract(registered.id);
+    // Removed while the chain was being read: nothing to save.
+    if (!current) return apply(registered);
+    // Two checks can finish out of order. An older read never replaces a newer one.
+    if (state && current.lastBlock && state.blockNumber < current.lastBlock) return current;
+    const contract = apply(current);
+    await saveContract(contract);
+    return contract;
+  });
+  if (result.acquired) return result.value;
+  // Someone else is recording a change on this contract right now. What was read is shown
+  // but not saved; the next check saves it.
+  console.warn(`[check] ${registered.id} is busy; this read was not saved`);
+  return apply((await getContract(registered.id)) || registered);
 }
 
 export async function checkAllContracts() {
@@ -161,27 +189,37 @@ async function requireContract(id) {
   return contract;
 }
 
+// Links are saved under the contract's claim, so a link and a check saving at the same moment
+// cannot overwrite each other.
+async function changeLinks(id, change) {
+  const contractId = String(id || '');
+  const result = await underClaim(contractId, async () => {
+    const contract = await requireContract(contractId);
+    if ((await change(contract)) !== false) await saveContract(contract);
+    return contract;
+  });
+  if (!result.acquired) throw new RegistryError('This contract is being checked right now. Try again in a moment.');
+  return result.value;
+}
+
 // Links a contract to a Jira issue. The caller must already have confirmed that the
 // current user can view the issue. Linking twice is harmless.
-export async function linkIssue(id, issue, accountId) {
-  const contract = await requireContract(id);
-  const links = contract.linkedIssues || [];
-  if (links.some((link) => link.id === issue.id)) return contract;
-  if (links.length >= MAX_LINKED_ISSUES) {
-    throw new RegistryError(`A contract can be linked to at most ${MAX_LINKED_ISSUES} issues. Unlink one first.`);
-  }
-  contract.linkedIssues = [
-    ...links,
-    { id: issue.id, key: issue.key, linkedBy: accountId || null, linkedAt: new Date().toISOString() },
-  ];
-  await saveContract(contract);
-  return contract;
+export async function linkIssue(id, issue) {
+  return changeLinks(id, (contract) => {
+    const links = contract.linkedIssues || [];
+    if (links.some((link) => link.id === issue.id)) return false;
+    if (links.length >= MAX_LINKED_ISSUES) {
+      throw new RegistryError(`A contract can be linked to at most ${MAX_LINKED_ISSUES} issues. Unlink one first.`);
+    }
+    contract.linkedIssues = [...links, { id: issue.id, key: issue.key, linkedAt: new Date().toISOString() }];
+    return true;
+  });
 }
 
 export async function unlinkIssue(id, issueId) {
-  const contract = await requireContract(id);
-  contract.linkedIssues = (contract.linkedIssues || []).filter((link) => link.id !== String(issueId));
-  await saveContract(contract);
+  const contract = await changeLinks(id, (target) => {
+    target.linkedIssues = (target.linkedIssues || []).filter((link) => link.id !== String(issueId));
+  });
   // An issue that is no longer linked no longer announces changes to this contract.
   for (const planned of await listPlanned(contract.id)) {
     if (planned.issue.id === String(issueId) && planned.status === 'open') await deletePlanned(planned.id);
@@ -193,23 +231,22 @@ export const linkedIssueIds = async (id) => ((await requireContract(id)).linkedI
 
 // Links a contract to the Confluence page that documents it. The caller must already have
 // confirmed that the current user can view the page. Linking twice is harmless.
-export async function linkPage(id, page, accountId) {
-  const contract = await requireContract(id);
-  const links = contract.linkedPages || [];
-  if (links.some((link) => link.id === page.id)) return contract;
-  if (links.length >= MAX_LINKED_PAGES) {
-    throw new RegistryError(`A contract can be linked to at most ${MAX_LINKED_PAGES} pages. Unlink one first.`);
-  }
-  contract.linkedPages = [...links, { id: page.id, linkedBy: accountId || null, linkedAt: new Date().toISOString() }];
-  await saveContract(contract);
-  return contract;
+export async function linkPage(id, page) {
+  return changeLinks(id, (contract) => {
+    const links = contract.linkedPages || [];
+    if (links.some((link) => link.id === page.id)) return false;
+    if (links.length >= MAX_LINKED_PAGES) {
+      throw new RegistryError(`A contract can be linked to at most ${MAX_LINKED_PAGES} pages. Unlink one first.`);
+    }
+    contract.linkedPages = [...links, { id: page.id, linkedAt: new Date().toISOString() }];
+    return true;
+  });
 }
 
 export async function unlinkPage(id, pageId) {
-  const contract = await requireContract(id);
-  contract.linkedPages = (contract.linkedPages || []).filter((link) => link.id !== String(pageId));
-  await saveContract(contract);
-  return contract;
+  return changeLinks(id, (contract) => {
+    contract.linkedPages = (contract.linkedPages || []).filter((link) => link.id !== String(pageId));
+  });
 }
 
 export const linkedPageIds = async (id) => ((await requireContract(id)).linkedPages || []).map((link) => link.id);

@@ -102,7 +102,7 @@ const actionBox = xcss({ width: '320px' });
 
 // One unrecorded change, with the ways to close it without leaving the issue. `mode` is the form
 // open for this change: 'link' (name the issue that explains it) or 'acknowledge' (a note).
-const OpenChange = ({ change, issueKey, busy, onReconcile, onAcknowledge }) => {
+const OpenChange = ({ change, issueKey, busy, canManage, onReconcile, onAcknowledge }) => {
   const [mode, setMode] = useState(null);
   const [text, setText] = useState('');
   const close = () => {
@@ -167,6 +167,8 @@ const OpenChange = ({ change, issueKey, busy, onReconcile, onAcknowledge }) => {
             Cancel
           </Button>
         </Inline>
+      ) : !canManage ? (
+        <Text color="color.text.subtle">A Jira admin can link this change to an issue or acknowledge it.</Text>
       ) : (
         <Inline space="space.100" shouldWrap>
           {!change.raisedHere && (
@@ -192,7 +194,7 @@ const OpenChange = ({ change, issueKey, busy, onReconcile, onAcknowledge }) => {
   );
 };
 
-const LinkedContract = ({ contract, issueKey, fields, busy, onUnlink, onDeclare, onRemovePlan, onReconcile, onAcknowledge }) => {
+const LinkedContract = ({ contract, issueKey, fields, busy, canManage, onUnlink, onDeclare, onRemovePlan, onReconcile, onAcknowledge }) => {
   const [declaring, setDeclaring] = useState(false);
   return (
   <Stack space="space.050">
@@ -235,6 +237,7 @@ const LinkedContract = ({ contract, issueKey, fields, busy, onUnlink, onDeclare,
         change={change}
         issueKey={issueKey}
         busy={busy}
+        canManage={canManage}
         onReconcile={onReconcile}
         onAcknowledge={onAcknowledge}
       />
@@ -274,6 +277,7 @@ const Panel = () => {
   const [choice, setChoice] = useState(null);
   const [busy, setBusy] = useState(null);
   const [fields, setFields] = useState([]);
+  const [canManage, setCanManage] = useState(false);
   const [notice, setNotice] = useState(null);
   const refreshed = useRef(false);
 
@@ -298,7 +302,10 @@ const Panel = () => {
   useEffect(() => {
     run('load', 'getIssuePanel');
     invoke('getSetup')
-      .then((setup) => setFields(setup.fields))
+      .then((setup) => {
+        setFields(setup.fields);
+        setCanManage(setup.canManage === true);
+      })
       .catch(() => {});
   }, [run]);
 
@@ -376,6 +383,7 @@ const Panel = () => {
           contract={contract}
           fields={fields}
           busy={busy}
+          canManage={canManage}
           onUnlink={(contractId) => run('unlink', 'unlinkContractFromIssue', { contractId })}
           onDeclare={(contractId, field, expectedValue) =>
             run('declare', 'declarePlannedChange', { contractId, field, expectedValue })

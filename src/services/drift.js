@@ -22,10 +22,10 @@ function refreshStatus(contract) {
   contract.status = findDifferences(contract.baseline, contract.observed).length > 0 ? 'drift' : 'in_sync';
 }
 
-function addIssueLink(contract, issue, accountId) {
+function addIssueLink(contract, issue) {
   const links = contract.linkedIssues || [];
   if (links.some((link) => link.id === issue.id)) return;
-  contract.linkedIssues = [...links, { id: issue.id, key: issue.key, linkedBy: accountId || null, linkedAt: now() }];
+  contract.linkedIssues = [...links, { id: issue.id, key: issue.key, linkedAt: now() }];
 }
 
 // Creates the Jira issue for an unreconciled change, if a project has been chosen. A failure
@@ -39,7 +39,7 @@ async function raiseIssue(change, contract, settings) {
       describeContract(contract)
     );
     change.issueFailed = false;
-    addIssueLink(contract, change.driftIssue, null);
+    addIssueLink(contract, change.driftIssue);
   } catch (error) {
     console.error(error);
     change.issueFailed = true;
@@ -200,7 +200,7 @@ async function requireChange(changeId) {
 
 // Closes a change and makes the record take the value now on the chain. `issue` is added to
 // the contract's linked issues when the change is being explained by one.
-async function resolve(changeId, resolution, accountId, issue) {
+async function resolve(changeId, resolution, issue) {
   const { contractId } = await requireChange(changeId);
   const resolved = await exclusively(contractId, async () => {
     const change = await requireChange(changeId);
@@ -209,9 +209,9 @@ async function resolve(changeId, resolution, accountId, issue) {
     if (!contract) throw new RegistryError('This contract is no longer registered.');
     const current = contract.observed[change.field] ?? null;
     contract.baseline[change.field] = current;
-    if (issue) addIssueLink(contract, issue, accountId);
+    if (issue) addIssueLink(contract, issue);
     refreshStatus(contract);
-    const closed = { ...change, ...resolution, newValue: current, resolvedBy: accountId || null, resolvedAt: now() };
+    const closed = { ...change, ...resolution, newValue: current, resolvedAt: now() };
     await saveChange(closed);
     await saveContract(contract);
     return { contract, change: closed };
@@ -222,16 +222,16 @@ async function resolve(changeId, resolution, accountId, issue) {
 }
 
 // "We know about this change and accept it", with a note saying why.
-export async function acknowledgeChange(changeId, note, accountId) {
+export async function acknowledgeChange(changeId, note) {
   const cleanNote = String(note || '').trim();
   if (!cleanNote) throw new RegistryError('Say briefly why this change is accepted.');
   if (cleanNote.length > 500) throw new RegistryError('Keep the note under 500 characters.');
-  return resolve(changeId, { status: 'acknowledged', note: cleanNote }, accountId);
+  return resolve(changeId, { status: 'acknowledged', note: cleanNote });
 }
 
 // "This issue explains the change." The caller has confirmed the user can view the issue.
-export async function reconcileWithIssue(changeId, issue, accountId) {
-  return resolve(changeId, { status: 'reconciled', resolutionIssue: { id: issue.id, key: issue.key } }, accountId, issue);
+export async function reconcileWithIssue(changeId, issue) {
+  return resolve(changeId, { status: 'reconciled', resolutionIssue: { id: issue.id, key: issue.key } }, issue);
 }
 
 function cleanValue(field, value) {
@@ -250,7 +250,7 @@ function requireField(field) {
 }
 
 // Changes a recorded value by hand, then checks the chain against the new record.
-export async function editBaseline(id, field, value, accountId) {
+export async function editBaseline(id, field, value) {
   requireField(field);
   const contractId = String(id || '');
   const recorded = cleanValue(field, value);
@@ -258,7 +258,7 @@ export async function editBaseline(id, field, value, accountId) {
     const contract = await getContract(contractId);
     if (!contract) throw new RegistryError('This contract is no longer registered.');
     contract.baseline[field] = recorded;
-    contract.lastEdit = { field, by: accountId || null, at: now() };
+    contract.lastEdit = { field, at: now() };
     refreshStatus(contract);
     await saveContract(contract);
   });
@@ -266,7 +266,7 @@ export async function editBaseline(id, field, value, accountId) {
 }
 
 // An issue announces that it will change one value of a contract it is linked to.
-export async function declarePlannedChange(contractId, issue, field, expectedValue, accountId) {
+export async function declarePlannedChange(contractId, issue, field, expectedValue) {
   requireField(field);
   const contract = await getContract(String(contractId || ''));
   if (!contract) throw new RegistryError('This contract is no longer registered.');
@@ -285,7 +285,6 @@ export async function declarePlannedChange(contractId, issue, field, expectedVal
     label: labelFor(field),
     expectedValue: expected,
     status: 'open',
-    declaredBy: accountId || null,
     declaredAt: now(),
   });
 }

@@ -42,7 +42,7 @@ Most tests run the real services against in-memory storage with a scripted chain
 | Scope | Why |
 |---|---|
 | `storage:app` | Contracts, changes, planned changes and settings |
-| `read:jira-work` | Read linked issues and projects as the current user |
+| `read:jira-work` | Read linked issues and projects as the current user, and check whether that user is a Jira admin |
 | `write:jira-work` | Create, comment on and close drift issues, as the app |
 | `read:page:confluence` | Read the Confluence pages linked to a contract, as the current user |
 | `read:object:jira`, `write:object:jira`, `delete:object:jira` | Teamwork Graph connector |
@@ -71,6 +71,7 @@ src/
     history.js          the transaction behind a newly detected change
     issues.js           Jira calls
     pages.js            Confluence page links: page id from a pasted link, pages read as the current user
+    access.js           Who may change the registry: Jira admins only, asked of Jira as the current user
     samples.js          sample contracts
   storage/              key-value storage, one record per item under a key prefix
   frontend/             UI Kit views: registry, issue panel, settings

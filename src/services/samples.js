@@ -17,7 +17,7 @@ export const SAMPLES = [
 
 // Registers every sample not already in the registry, reading each from its chain.
 // A sample that cannot be read is skipped and reported; the others still load.
-export async function loadSamples(accountId) {
+export async function loadSamples() {
   const result = { added: [], alreadyThere: [], failed: [] };
   for (const sample of SAMPLES) {
     if (await getContract(contractId(sample.chain, sample.address))) {
@@ -25,7 +25,7 @@ export async function loadSamples(accountId) {
       continue;
     }
     try {
-      await registerContract(sample, accountId, { sample: true });
+      await registerContract(sample, { sample: true });
       result.added.push(sample.name);
     } catch (error) {
       if (error.name !== 'ChainUnreachableError' && !(error instanceof RegistryError)) throw error;

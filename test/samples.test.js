@@ -43,7 +43,7 @@ test('every sample is a valid address on a supported chain, listed once, with no
 });
 
 test('loading registers every sample, marked as a sample', async () => {
-  const result = await loadSamples('judge');
+  const result = await loadSamples();
   assert.equal(result.added.length, SAMPLES.length);
   const { contracts } = await registry.getRegistry();
   assert.equal(contracts.length, SAMPLES.length);
@@ -51,23 +51,23 @@ test('loading registers every sample, marked as a sample', async () => {
 });
 
 test('loading twice adds nothing the second time', async () => {
-  await loadSamples('judge');
-  const again = await loadSamples('judge');
+  await loadSamples();
+  const again = await loadSamples();
   assert.equal(again.added.length, 0);
   assert.equal(again.alreadyThere.length, SAMPLES.length);
 });
 
 test('an unreachable chain skips its samples and loads the rest', async () => {
   unreachable.add('polygon');
-  const result = await loadSamples('judge');
+  const result = await loadSamples();
   assert.deepEqual(result.failed, ['Sample: stablecoin on Polygon']);
   assert.equal(result.added.length, SAMPLES.length - 1);
 });
 
 test('removing takes away samples only, not contracts registered by hand', async () => {
   const mine = { chain: 'sepolia', address: '0x' + '9'.repeat(40), name: 'Our treasury' };
-  await registry.registerContract(mine, 'zax');
-  await loadSamples('judge');
+  await registry.registerContract(mine);
+  await loadSamples();
   const { removed } = await removeSamples();
   assert.equal(removed, SAMPLES.length);
   const { contracts } = await registry.getRegistry();
@@ -76,8 +76,8 @@ test('removing takes away samples only, not contracts registered by hand', async
 
 test('a sample address registered by hand is left alone by both load and remove', async () => {
   const [first] = SAMPLES;
-  await registry.registerContract({ ...first, name: 'Our stablecoin' }, 'zax');
-  const result = await loadSamples('judge');
+  await registry.registerContract({ ...first, name: 'Our stablecoin' });
+  const result = await loadSamples();
   assert.ok(result.alreadyThere.includes(first.name));
   await removeSamples();
   const { contracts } = await registry.getRegistry();

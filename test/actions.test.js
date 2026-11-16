@@ -55,8 +55,8 @@ const actions = await import('../src/actions/index.js');
 beforeEach(async () => {
   store.clear();
   chain.state = { implementation: A, admin: A, beacon: null, owner: A, codeHash: '0x01' };
-  await registry.registerContract({ chain: 'ethereum', address: TREASURY, name: 'Treasury' }, 'u');
-  await registry.registerContract({ chain: 'base', address: TOKEN, name: 'Token' }, 'u');
+  await registry.registerContract({ chain: 'ethereum', address: TREASURY, name: 'Treasury' });
+  await registry.registerContract({ chain: 'base', address: TOKEN, name: 'Token' });
 });
 
 test('list-contracts returns every contract with totals', async () => {
@@ -84,7 +84,7 @@ test('contract-status finds a contract by name or address', async () => {
 });
 
 test('contract-status asks which one when several match, and says when none do', async () => {
-  await registry.registerContract({ chain: 'base', address: TREASURY, name: 'Treasury' }, 'u');
+  await registry.registerContract({ chain: 'base', address: TREASURY, name: 'Treasury' });
   const ambiguous = await actions.contractStatusAction({ contract: 'Treasury' });
   assert.equal(ambiguous.ok, false);
   assert.equal(ambiguous.candidates.length, 2);

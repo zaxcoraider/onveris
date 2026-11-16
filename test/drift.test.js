@@ -80,7 +80,7 @@ const { saveSettings } = await import('../src/storage/settings.js');
 const chooseProject = () => saveSettings({ driftProject: { id: '1', key: 'SEC', name: 'Security' }, issueType: { id: '2', name: 'Task' } });
 const contract = () => store.get(`contract:${ID}`);
 const changes = () => drift.changesFor(ID);
-const register = () => registry.registerContract({ chain: 'ethereum', address: ADDRESS, name: 'Treasury' }, 'user-1');
+const register = () => registry.registerContract({ chain: 'ethereum', address: ADDRESS, name: 'Treasury' });
 
 beforeEach(() => {
   store.clear();
@@ -171,8 +171,8 @@ test('a failed issue is flagged and tried again on the next check', async () => 
 test('a change an issue announced is accepted without raising anything', async () => {
   await register();
   await chooseProject();
-  await registry.linkIssue(ID, ISSUE, 'user-1');
-  await drift.declarePlannedChange(ID, ISSUE, 'implementation', '', 'user-1');
+  await registry.linkIssue(ID, ISSUE);
+  await drift.declarePlannedChange(ID, ISSUE, 'implementation', '');
   chain.state.implementation = B;
   const checked = await drift.checkAndRecord(ID);
   assert.equal(checked.status, 'in_sync');
@@ -187,8 +187,8 @@ test('a change an issue announced is accepted without raising anything', async (
 test('a planned change with an expected value does not cover a different value', async () => {
   await register();
   await chooseProject();
-  await registry.linkIssue(ID, ISSUE, 'user-1');
-  await drift.declarePlannedChange(ID, ISSUE, 'implementation', B, 'user-1');
+  await registry.linkIssue(ID, ISSUE);
+  await drift.declarePlannedChange(ID, ISSUE, 'implementation', B);
   chain.state.implementation = C;
   const checked = await drift.checkAndRecord(ID);
   assert.equal(checked.status, 'drift');
@@ -198,7 +198,7 @@ test('a planned change with an expected value does not cover a different value',
 
 test('a planned change can only be declared from a linked issue', async () => {
   await register();
-  await assert.rejects(drift.declarePlannedChange(ID, ISSUE, 'owner', '', 'user-1'), { name: 'RegistryError' });
+  await assert.rejects(drift.declarePlannedChange(ID, ISSUE, 'owner', ''), { name: 'RegistryError' });
 });
 
 test('acknowledging updates the record and cannot be done twice', async () => {
@@ -206,14 +206,14 @@ test('acknowledging updates the record and cannot be done twice', async () => {
   chain.state.owner = B;
   await drift.checkAndRecord(ID);
   const [open] = await changes();
-  await assert.rejects(drift.acknowledgeChange(open.id, '  ', 'user-2'), { name: 'RegistryError' });
-  const resolved = await drift.acknowledgeChange(open.id, 'Agreed in the incident call', 'user-2');
+  await assert.rejects(drift.acknowledgeChange(open.id, '  '), { name: 'RegistryError' });
+  const resolved = await drift.acknowledgeChange(open.id, 'Agreed in the incident call');
   assert.equal(resolved.status, 'in_sync');
   assert.equal(resolved.baseline.owner, B);
   const [change] = await changes();
   assert.equal(change.status, 'acknowledged');
   assert.equal(change.note, 'Agreed in the incident call');
-  await assert.rejects(drift.acknowledgeChange(open.id, 'again', 'user-2'), { name: 'RegistryError' });
+  await assert.rejects(drift.acknowledgeChange(open.id, 'again'), { name: 'RegistryError' });
   assert.equal((await drift.checkAndRecord(ID)).status, 'in_sync');
   assert.equal((await changes()).length, 1);
 });
@@ -223,7 +223,7 @@ test('reconciling with an issue links that issue to the contract', async () => {
   chain.state.owner = B;
   await drift.checkAndRecord(ID);
   const [open] = await changes();
-  const resolved = await drift.reconcileWithIssue(open.id, ISSUE, 'user-2');
+  const resolved = await drift.reconcileWithIssue(open.id, ISSUE);
   assert.equal(resolved.status, 'in_sync');
   assert.deepEqual(resolved.linkedIssues.map((link) => link.key), ['OPS-1']);
   assert.equal((await changes())[0].status, 'reconciled');
@@ -236,24 +236,24 @@ test('reconciling one of two changes leaves the contract in drift', async () => 
   await drift.checkAndRecord(ID);
   const open = await changes();
   assert.equal(open.length, 2);
-  const resolved = await drift.acknowledgeChange(open[0].id, 'known', 'user-2');
+  const resolved = await drift.acknowledgeChange(open[0].id, 'known');
   assert.equal(resolved.status, 'drift');
 });
 
 test('editing the record creates drift, and editing it back clears the change', async () => {
   await register();
-  const edited = await drift.editBaseline(ID, 'owner', C, 'user-3');
+  const edited = await drift.editBaseline(ID, 'owner', C);
   assert.equal(edited.status, 'drift');
   assert.equal((await changes())[0].oldValue, C);
-  const restored = await drift.editBaseline(ID, 'owner', A, 'user-3');
+  const restored = await drift.editBaseline(ID, 'owner', A);
   assert.equal(restored.status, 'in_sync');
   assert.equal((await changes())[0].status, 'cleared');
 });
 
 test('editing the record rejects a value that is not an address', async () => {
   await register();
-  await assert.rejects(drift.editBaseline(ID, 'owner', 'hello', 'user-3'), { name: 'RegistryError' });
-  await assert.rejects(drift.editBaseline(ID, 'nonsense', A, 'user-3'), { name: 'RegistryError' });
+  await assert.rejects(drift.editBaseline(ID, 'owner', 'hello'), { name: 'RegistryError' });
+  await assert.rejects(drift.editBaseline(ID, 'nonsense', A), { name: 'RegistryError' });
 });
 
 test('a value on the chain that moves again updates the open change', async () => {
@@ -274,7 +274,7 @@ test('a check that overlaps a reconcile does not undo it', async () => {
   chain.state.owner = B;
   await drift.checkAndRecord(ID);
   const [open] = await changes();
-  await Promise.all([drift.checkAndRecord(ID), drift.acknowledgeChange(open.id, 'known', 'user-2').catch(() => {})]);
+  await Promise.all([drift.checkAndRecord(ID), drift.acknowledgeChange(open.id, 'known').catch(() => {})]);
   await drift.checkAndRecord(ID);
   const all = await changes();
   assert.equal(all.length, 1, 'no second change for the same difference');
@@ -282,8 +282,8 @@ test('a check that overlaps a reconcile does not undo it', async () => {
 
 test('removing a contract removes its changes and planned changes', async () => {
   await register();
-  await registry.linkIssue(ID, ISSUE, 'user-1');
-  await drift.declarePlannedChange(ID, ISSUE, 'admin', '', 'user-1');
+  await registry.linkIssue(ID, ISSUE);
+  await drift.declarePlannedChange(ID, ISSUE, 'admin', '');
   chain.state.owner = B;
   await drift.checkAndRecord(ID);
   await registry.removeContract(ID);
@@ -304,7 +304,7 @@ test('acknowledging closes the drift issue with the note in the comment', async 
   chain.state.owner = B;
   await drift.checkAndRecord(ID);
   const [open] = await changes();
-  await drift.acknowledgeChange(open.id, 'Agreed in the incident call', 'user-2');
+  await drift.acknowledgeChange(open.id, 'Agreed in the incident call');
   assert.equal(jira.closed.length, 1);
   assert.equal(jira.closed[0].key, 'SEC-1');
   assert.match(jira.closed[0].outcome, /Agreed in the incident call/);
@@ -317,7 +317,7 @@ test('reconciling closes the drift issue without naming the explaining issue', a
   chain.state.owner = B;
   await drift.checkAndRecord(ID);
   const [open] = await changes();
-  await drift.reconcileWithIssue(open.id, ISSUE, 'user-2');
+  await drift.reconcileWithIssue(open.id, ISSUE);
   assert.equal(jira.closed.length, 1);
   assert.ok(!jira.closed[0].outcome.includes(ISSUE.key));
 });
@@ -341,7 +341,7 @@ test('a workflow that cannot close the issue is remembered, and the reconcile st
   chain.state.owner = B;
   await drift.checkAndRecord(ID);
   const [open] = await changes();
-  const resolved = await drift.acknowledgeChange(open.id, 'known', 'user-2');
+  const resolved = await drift.acknowledgeChange(open.id, 'known');
   assert.equal(resolved.status, 'in_sync');
   assert.equal((await changes())[0].driftIssueClosed, false);
 });
@@ -351,7 +351,7 @@ test('a change with no drift issue does not touch Jira when resolved', async () 
   chain.state.owner = B;
   await drift.checkAndRecord(ID);
   const [open] = await changes();
-  await drift.acknowledgeChange(open.id, 'known', 'user-2');
+  await drift.acknowledgeChange(open.id, 'known');
   assert.equal(jira.closed.length, 0);
 });
 
@@ -366,5 +366,57 @@ test('a contract removed while checking everything is skipped quietly', async ()
     assert.equal(summary.checked, 1);
   } finally {
     kvs.get = original;
+  }
+});
+
+test('nothing that is stored names a user', async () => {
+  await register();
+  await chooseProject();
+  await registry.linkIssue(ID, ISSUE);
+  await registry.linkPage(ID, { id: '42' });
+  await drift.declarePlannedChange(ID, ISSUE, 'admin', '');
+  chain.state.owner = B;
+  await drift.checkAndRecord(ID);
+  const [open] = await changes();
+  await drift.acknowledgeChange(open.id, 'known');
+  await drift.editBaseline(ID, 'owner', C);
+  const { withoutAccountIds } = await import('../src/storage/scrub.js');
+  for (const [key, value] of store) {
+    assert.equal(withoutAccountIds(value), null, `${key} holds an account id`);
+    assert.doesNotMatch(JSON.stringify(value), /accountId|linkedBy|resolvedBy|createdBy|declaredBy/, key);
+  }
+});
+
+test('account ids saved by earlier versions are removed once', async () => {
+  const { removeStoredAccountIds } = await import('../src/storage/scrub.js');
+  await kvs.set('contract:x', { id: 'x', name: 'Old', createdBy: 'u1', linkedIssues: [{ id: '1', key: 'A-1', linkedBy: 'u1' }], lastEdit: { field: 'owner', by: 'u2', at: 't' } });
+  await kvs.set('change:x:1', { id: 'x:1', detectedAt: 't', resolvedBy: 'u3' });
+  await kvs.set('settings', { driftProject: null, updatedBy: 'u4' });
+  await removeStoredAccountIds();
+  assert.deepEqual(await kvs.get('contract:x'), { id: 'x', name: 'Old', linkedIssues: [{ id: '1', key: 'A-1' }], lastEdit: { field: 'owner', at: 't' } });
+  assert.deepEqual(await kvs.get('change:x:1'), { id: 'x:1', detectedAt: 't' });
+  assert.deepEqual(await kvs.get('settings'), { driftProject: null });
+  await kvs.set('change:x:2', { id: 'x:2', detectedAt: 't', resolvedBy: 'u5' });
+  await removeStoredAccountIds();
+  assert.equal((await kvs.get('change:x:2')).resolvedBy, 'u5');
+});
+
+test('a link saved while a check runs is kept, and the check is not undone by the link', async () => {
+  await register();
+  for (let round = 0; round < 5; round += 1) {
+    chain.state.owner = round % 2 ? A : B;
+    chain.block += 1;
+    const issue = { id: String(20000 + round), key: `OPS-${round + 2}` };
+    await Promise.all([
+      drift.checkAndRecord(ID),
+      registry.linkIssue(ID, issue),
+      registry.linkPage(ID, { id: String(500 + round) }),
+      drift.checkAndRecord(ID),
+    ]);
+    const saved = await kvs.get(`contract:${ID}`);
+    assert.ok(saved.linkedIssues.some((link) => link.id === issue.id), `round ${round}: issue link lost`);
+    assert.ok(saved.linkedPages.some((link) => link.id === String(500 + round)), `round ${round}: page link lost`);
+    assert.equal(saved.observed.owner, chain.state.owner, `round ${round}: stale chain values saved`);
+    assert.equal(saved.lastBlock, chain.block);
   }
 });

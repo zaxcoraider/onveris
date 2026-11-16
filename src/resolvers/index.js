@@ -19,6 +19,7 @@ import {
 } from '../services/registry.js';
 import { findIssue, findVisibleIssues, extractIssueKey } from '../services/issues.js';
 import { extractPageId, findPage, findVisiblePages } from '../services/pages.js';
+import { isJiraAdmin, requireAdmin } from '../services/access.js';
 import {
   checkAndRecord,
   checkAllAndRecord,
@@ -91,7 +92,25 @@ async function issuePanel(issue) {
   };
 }
 
-resolver.define('getSetup', () => ({ chains: listChains(), fields: TRACKED_FIELDS }));
+// For actions that change what the registry holds as true: Jira admins only. The UI hides
+// these from everyone else, but this check is the one that counts.
+const adminOnly = (handler) =>
+  safely(async (request) => {
+    await requireAdmin();
+    return handler(request);
+  });
+
+// `canManage` only decides what the UI offers; every admin action is checked again when used.
+resolver.define('getSetup', async () => {
+  let canManage = false;
+  try {
+    canManage = await isJiraAdmin();
+  } catch (error) {
+    if (error instanceof NeedsAuthenticationError) throw error;
+    console.warn(`[access] ${error.message}`);
+  }
+  return { chains: listChains(), fields: TRACKED_FIELDS, canManage };
+});
 
 // The registry plus whether a project has been chosen for drift issues.
 async function registryView() {
@@ -115,7 +134,7 @@ async function contractChanges(id) {
   const { issues } = await findVisibleIssues([...new Set(refs.map((ref) => ref.id))]);
   const visible = new Map(issues.map((issue) => [issue.id, issue]));
   const show = (ref) => (ref ? visible.get(ref.id) || null : null);
-  const view = ({ driftIssue, resolutionIssue, resolvedBy, ...change }) => ({
+  const view = ({ driftIssue, resolutionIssue, ...change }) => ({
     ...change,
     driftIssue: show(driftIssue),
     resolutionIssue: show(resolutionIssue),
@@ -135,17 +154,17 @@ resolver.define('getRegistry', safely(registryView));
 
 resolver.define(
   'loadSamples',
-  safely(async ({ context }) => ({ loaded: await loadSamples(context?.accountId), ...(await registryView()) }))
+  adminOnly(async () => ({ loaded: await loadSamples(), ...(await registryView()) }))
 );
 
-resolver.define('removeSamples', safely(async () => ({ ...(await removeSamples()), ...(await registryView()) })));
+resolver.define('removeSamples', adminOnly(async () => ({ ...(await removeSamples()), ...(await registryView()) })));
 
 resolver.define('previewContract', safely(async ({ payload }) => ({ preview: await previewContract(payload || {}) })));
 
 resolver.define(
   'registerContract',
-  safely(async ({ payload, context }) => ({
-    contract: describeContract(await registerContract(payload || {}, context?.accountId)),
+  adminOnly(async ({ payload }) => ({
+    contract: describeContract(await registerContract(payload || {})),
   }))
 );
 
@@ -164,7 +183,7 @@ resolver.define(
 
 resolver.define(
   'removeContract',
-  safely(async ({ payload }) => {
+  adminOnly(async ({ payload }) => {
     await removeContract(payload?.id);
     return {};
   })
@@ -178,9 +197,9 @@ resolver.define(
 
 resolver.define(
   'linkIssueByKey',
-  safely(async ({ payload, context }) => {
+  safely(async ({ payload }) => {
     const issue = await requireVisibleIssue(payload?.issueKey);
-    await linkIssue(payload?.id, issue, context?.accountId);
+    await linkIssue(payload?.id, issue);
     return findVisibleIssues(await linkedIssueIds(payload?.id));
   })
 );
@@ -207,12 +226,12 @@ resolver.define('getContractPages', safely(async ({ payload }) => contractPages(
 
 resolver.define(
   'linkPageByLink',
-  safely(async ({ payload, context }) => {
+  safely(async ({ payload }) => {
     const pageId = extractPageId(payload?.pageLink);
     if (!pageId) throw new RegistryError('Paste the link to a Confluence page, or its page id.');
     const page = await findPage(pageId);
     if (!page) throw new RegistryError("Couldn't find that page. Check the link, and that you can view the page.");
-    await linkPage(payload?.id, page, context?.accountId);
+    await linkPage(payload?.id, page);
     return contractPages(payload?.id);
   })
 );
@@ -232,23 +251,23 @@ resolver.define('getContractChanges', safely(async ({ payload }) => ({ changes: 
 
 resolver.define(
   'acknowledgeChange',
-  safely(async ({ payload, context }) =>
-    contractAndChanges(await acknowledgeChange(payload?.changeId, payload?.note, context?.accountId))
+  adminOnly(async ({ payload }) =>
+    contractAndChanges(await acknowledgeChange(payload?.changeId, payload?.note))
   )
 );
 
 resolver.define(
   'reconcileWithIssue',
-  safely(async ({ payload, context }) => {
+  adminOnly(async ({ payload }) => {
     const issue = await requireVisibleIssue(payload?.issueKey);
-    return contractAndChanges(await reconcileWithIssue(payload?.changeId, issue, context?.accountId));
+    return contractAndChanges(await reconcileWithIssue(payload?.changeId, issue));
   })
 );
 
 resolver.define(
   'editBaseline',
-  safely(async ({ payload, context }) =>
-    contractAndChanges(await editBaseline(payload?.id, payload?.field, payload?.value, context?.accountId))
+  adminOnly(async ({ payload }) =>
+    contractAndChanges(await editBaseline(payload?.id, payload?.field, payload?.value))
   )
 );
 
@@ -258,7 +277,7 @@ resolver.define(
   'linkContractToIssue',
   safely(async ({ payload, context }) => {
     const issue = panelIssue(context);
-    await linkIssue(payload?.contractId, issue, context?.accountId);
+    await linkIssue(payload?.contractId, issue);
     return issuePanel(issue);
   })
 );
@@ -287,7 +306,7 @@ resolver.define(
   'declarePlannedChange',
   safely(async ({ payload, context }) => {
     const issue = panelIssue(context);
-    await declarePlannedChange(payload?.contractId, issue, payload?.field, payload?.expectedValue, context?.accountId);
+    await declarePlannedChange(payload?.contractId, issue, payload?.field, payload?.expectedValue);
     return issuePanel(issue);
   })
 );
@@ -317,7 +336,7 @@ async function panelChange(issue, changeId) {
 // change; a drift issue cannot explain its own change.
 resolver.define(
   'reconcileFromPanel',
-  safely(async ({ payload, context }) => {
+  adminOnly(async ({ payload, context }) => {
     const here = panelIssue(context);
     const change = await panelChange(here, payload?.changeId);
     const issue = payload?.issueKey ? await requireVisibleIssue(payload.issueKey) : here;
@@ -326,17 +345,17 @@ resolver.define(
         `${issue.key} was raised by Onveris for this change, so it can't explain it. Name the issue that planned the change, or acknowledge it.`
       );
     }
-    await reconcileWithIssue(change.id, issue, context?.accountId);
+    await reconcileWithIssue(change.id, issue);
     return issuePanel(here);
   })
 );
 
 resolver.define(
   'acknowledgeFromPanel',
-  safely(async ({ payload, context }) => {
+  adminOnly(async ({ payload, context }) => {
     const here = panelIssue(context);
     const change = await panelChange(here, payload?.changeId);
-    await acknowledgeChange(change.id, payload?.note, context?.accountId);
+    await acknowledgeChange(change.id, payload?.note);
     return issuePanel(here);
   })
 );

@@ -35,9 +35,9 @@ resolver.define('getStatus', adminOnly(getStatus));
 
 resolver.define(
   'saveSettings',
-  adminOnly(async ({ payload, context }) => {
+  adminOnly(async ({ payload }) => {
     const projectId = String(payload?.projectId || '');
-    const stamp = { updatedBy: context?.accountId || null, updatedAt: new Date().toISOString() };
+    const stamp = { updatedAt: new Date().toISOString() };
     if (!projectId) {
       await saveSettings({ driftProject: null, issueType: null, ...stamp });
       return view();
