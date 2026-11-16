@@ -47,13 +47,13 @@ You need a Jira Cloud site where you can install apps and are a Jira admin. Conf
 
 1. **Install** Onveris in Jira from the install link in the Devpost submission.
 2. **Load samples.** Open **Apps > Onveris** in Jira and choose **Load sample contracts**. Eight well-known public contracts on five chains are read live and appear *In sync*.
-3. **Choose where issues go.** Open **Settings (⚙️) > Apps**, choose **Onveris** in the left menu, pick a project and save.
+3. **Choose where issues go.** Open **Settings (⚙️) > Jira apps** and choose **Onveris** under **Apps** in the left menu. Pick a project and save. Below it, **How Onveris is running** tests every chain endpoint live and shows when the automatic check last ran.
 4. **Cause a change.** Open any sample contract, choose **Edit record** on the *Proxy admin* row, change the last character and choose **Save and check**. Onveris shows **Drift**, records the change and opens a Jira issue for it.
 5. **Reconcile it.** Choose **Acknowledge**, add a note and confirm. The contract is back *In sync*, the change is in **History**, and the Jira issue gets a comment and is closed.
 6. **Work from an issue.** Open any Jira issue and choose **Onveris** in the row of app buttons under the title. Link a contract.
    - **Reconcile from the issue:** repeat step 4 on that contract. The panel now lists the open change; choose **… explains it** (the button carries this issue's key). The change is linked to the issue and the contract is back *In sync*.
    - **Plan ahead:** choose **Declare change**, pick **Proxy admin** and declare it. Repeat step 4 once more: this time the change is recognised as planned and no issue is raised.
-7. **Put it in Confluence** (optional). Onveris is installed in Jira first; to use it in Confluence on the same site, connect it there from [Atlassian Administration](https://admin.atlassian.com) under **Apps** (your site's connected apps). Then edit any page, type `/Onveris contracts` (or use **+** in the toolbar) and publish. The table shows every registered contract with its live status; choose **Edit** on the macro to filter by chain or status.
+7. **Put it in Confluence** (optional). Onveris is installed in Jira first; to use it in Confluence on the same site, connect it there: in [Atlassian Administration](https://admin.atlassian.com) open **Apps > Connected apps**, choose **View app details** on **onveris**, open **Connections** and connect **Confluence**. Then edit any page, type `/Onveris contracts` (or use **+** in the toolbar) and publish. The table shows every registered contract with its live status; choose **Edit** on the macro to filter by chain or status.
 8. **Ask Rovo** (if your site has it). Open Rovo Chat, choose the **Onveris** agent and ask *"Has anything changed this week?"*
 
 Editing the record is the same as the chain changing under you: Onveris cannot tell the difference, so the full flow can be tried without touching a blockchain.
@@ -73,6 +73,7 @@ Every entry point calls the same core services, so the page, the issue panel, th
 
 - **Reading the chain:** standard public JSON-RPC calls. The code fingerprint comes from `eth_getCode`, proxy details from the standard storage slots (EIP-1967 and the older OpenZeppelin layout), the owner from `owner()`, and the transaction behind a change from upgrade and ownership events.
 - **Chains:** Ethereum, Base, Arbitrum One, Optimism, Polygon and the Sepolia test network, each with two public endpoints tried in turn.
+- **Endpoints:** free public endpoints, so no keys or sign-up are needed. The first choice on every chain is [PublicNode](https://www.publicnode.com/terms), whose terms allow automated reads like these; the fallbacks are other free endpoints that run on a best-effort basis. A team using Onveris for real would point it at its own node provider.
 - **Data that leaves Atlassian:** only contract addresses, in standard read requests to those endpoints. Nothing from Jira or Confluence is sent anywhere.
 
 ## Built with

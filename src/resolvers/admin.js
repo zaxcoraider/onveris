@@ -2,6 +2,7 @@ import Resolver from '@forge/resolver';
 import { NeedsAuthenticationError } from '@forge/api';
 import { listProjects, pickIssueType } from '../services/issues.js';
 import { getSettings, saveSettings } from '../storage/settings.js';
+import { getStatus } from '../services/status.js';
 
 // Handlers for the settings page. This function is wired only to the Jira admin page, which
 // Jira shows to administrators alone, and each handler also refuses any other module.
@@ -28,6 +29,9 @@ const view = async () => {
 };
 
 resolver.define('getSettings', adminOnly(view));
+
+// Live status of the chain endpoints, the checker, Confluence and the Teamwork Graph connector.
+resolver.define('getStatus', adminOnly(getStatus));
 
 resolver.define(
   'saveSettings',

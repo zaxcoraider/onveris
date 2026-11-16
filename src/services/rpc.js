@@ -58,3 +58,15 @@ export async function rpcBatch(chainKey, calls) {
   }
   throw new ChainUnreachableError(chainKey, attempts);
 }
+
+// Asks one endpoint for its latest block, for the settings page's status section.
+// Never throws: returns { ok, block, ms } or { ok: false, reason, ms }.
+export async function probeEndpoint(endpoint) {
+  const started = Date.now();
+  try {
+    const [block] = await callEndpoint(endpoint, [{ method: 'eth_blockNumber', params: [] }]);
+    return { ok: true, block: Number(BigInt(block)), ms: Date.now() - started };
+  } catch (error) {
+    return { ok: false, reason: error.name === 'AbortError' ? 'timed out' : error.message, ms: Date.now() - started };
+  }
+}

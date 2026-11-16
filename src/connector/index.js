@@ -1,5 +1,6 @@
 import { graph } from '@forge/teamwork-graph';
 import { getRegistry } from '../services/registry.js';
+import { recordConnectorEvent } from '../storage/status.js';
 
 // Teamwork Graph connector. When a site admin connects it, every registered contract is sent
 // to the graph as a document, so it can turn up in Rovo Search and Rovo Chat. The values are
@@ -47,11 +48,15 @@ export async function onConnectionChangeHandler(request) {
   console.log(`[connector] connection ${action}`);
 
   // Atlassian removes ingested objects itself when a connection is deleted.
-  if (action === 'DELETED') return { success: true };
+  if (action === 'DELETED') {
+    await recordConnectorEvent(action);
+    return { success: true };
+  }
 
   const { contracts } = await getRegistry();
   if (contracts.length === 0) {
     console.log('[connector] no contracts registered yet; nothing to send');
+    await recordConnectorEvent(action);
     return { success: true };
   }
 
@@ -63,5 +68,6 @@ export async function onConnectionChangeHandler(request) {
     return { success: false, message: 'Teamwork Graph did not accept the contract data.' };
   }
   console.log(`[connector] ${accepted || contracts.length} accepted, 0 rejected`);
+  await recordConnectorEvent(action);
   return { success: true };
 }

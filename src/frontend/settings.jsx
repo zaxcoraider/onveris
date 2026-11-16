@@ -2,9 +2,12 @@ import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
   Box,
   Button,
+  DynamicTable,
   Heading,
+  Inline,
   Label,
   LoadingButton,
+  Lozenge,
   SectionMessage,
   Select,
   Spinner,
@@ -12,9 +15,168 @@ import ForgeReconciler, {
   Text,
   xcss,
 } from '@forge/react';
-import { call } from './shared.jsx';
+import { call, timeAgo } from './shared.jsx';
 
 const pickerBox = xcss({ width: '360px' });
+
+const LATE_AFTER_MS = 15 * 60 * 1000;
+
+const EndpointCell = ({ endpoint }) =>
+  endpoint ? (
+    <Stack space="space.050">
+      <Inline space="space.100" alignBlock="center">
+        <Lozenge appearance={endpoint.ok ? 'success' : 'removed'}>{endpoint.ok ? 'Working' : 'Not responding'}</Lozenge>
+        <Text>{endpoint.host}</Text>
+      </Inline>
+      <Text color="color.text.subtle">
+        {endpoint.ok ? `Block ${endpoint.block.toLocaleString('en-US')} · ${endpoint.ms} ms` : endpoint.reason}
+      </Text>
+    </Stack>
+  ) : (
+    <Text color="color.text.subtle">None</Text>
+  );
+
+const StatusRow = ({ label, appearance, state, children }) => (
+  <Stack space="space.050">
+    <Inline space="space.100" alignBlock="center">
+      <Text weight="bold">{label}</Text>
+      {state && <Lozenge appearance={appearance}>{state}</Lozenge>}
+    </Inline>
+    <Text>{children}</Text>
+  </Stack>
+);
+
+const checkerRow = (checker) => {
+  if (!checker) {
+    return { appearance: 'default', state: 'Not run yet', text: 'The first automatic check runs within five minutes of installing.' };
+  }
+  const { checked = 0, unreachable = 0, drift = 0 } = checker.summary || {};
+  const parts = [`${checked} ${checked === 1 ? 'contract' : 'contracts'} checked`];
+  if (drift) parts.push(`${drift} changed on the chain`);
+  if (unreachable) parts.push(`${unreachable} unreachable`);
+  if (Date.now() - new Date(checker.at).getTime() > LATE_AFTER_MS) {
+    return {
+      appearance: 'moved',
+      state: 'Late',
+      text: `Last ran ${timeAgo(checker.at)} (${parts.join(', ')}). It should run every five minutes.`,
+    };
+  }
+  return { appearance: 'success', state: 'Running', text: `Every five minutes. Last ran ${timeAgo(checker.at)}: ${parts.join(', ')}.` };
+};
+
+// How Onveris is running: chain endpoints tested live, plus the checker and the optional connections.
+const SystemStatus = () => {
+  const [status, setStatus] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const result = await call('getStatus');
+    setLoading(false);
+    if (!result.ok) return setError(result.message);
+    setError(null);
+    setStatus(result);
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const header = (
+    <Inline spread="space-between" alignBlock="center">
+      <Heading as="h2">How Onveris is running</Heading>
+      <LoadingButton onClick={load} isLoading={loading} isDisabled={!status && !error}>
+        Test again
+      </LoadingButton>
+    </Inline>
+  );
+
+  if (!status) {
+    return (
+      <Stack space="space.100">
+        {header}
+        {error ? (
+          <SectionMessage appearance="error">
+            <Text>{error}</Text>
+          </SectionMessage>
+        ) : (
+          <Spinner size="medium" label="Testing the connections" />
+        )}
+      </Stack>
+    );
+  }
+
+  const checker = checkerRow(status.checker);
+  const connected = status.connector && status.connector.action !== 'DELETED';
+  const down = status.chains.filter((chain) => !chain.endpoints.some((endpoint) => endpoint.ok));
+
+  return (
+    <Stack space="space.200">
+      {header}
+      {error && (
+        <SectionMessage appearance="error">
+          <Text>{error}</Text>
+        </SectionMessage>
+      )}
+      <Text>
+        Each chain has a main endpoint and a backup, tried in that order. A chain is only unreachable when both fail;
+        Onveris then shows the contract as unreachable and never reports it as a change.
+      </Text>
+      {down.length > 0 && (
+        <SectionMessage appearance="warning" title="Some chains can't be reached right now">
+          <Text>
+            {down.map((chain) => chain.name).join(', ')}: contracts on these chains show as unreachable until an endpoint
+            answers again.
+          </Text>
+        </SectionMessage>
+      )}
+      <DynamicTable
+        label="Blockchain endpoints"
+        head={{
+          cells: [
+            { key: 'chain', content: 'Chain' },
+            { key: 'main', content: 'Main endpoint' },
+            { key: 'backup', content: 'Backup endpoint' },
+          ],
+        }}
+        rows={status.chains.map((chain) => ({
+          key: chain.key,
+          cells: [
+            { key: 'chain', content: <Text weight="bold">{chain.name}</Text> },
+            { key: 'main', content: <EndpointCell endpoint={chain.endpoints[0]} /> },
+            { key: 'backup', content: <EndpointCell endpoint={chain.endpoints[1]} /> },
+          ],
+        }))}
+      />
+      <StatusRow label="Automatic checks" appearance={checker.appearance} state={checker.state}>
+        {checker.text}
+      </StatusRow>
+      <StatusRow
+        label="Confluence"
+        appearance={status.confluence.connected ? 'success' : 'default'}
+        state={status.confluence.connected ? 'Connected' : 'Not connected'}
+      >
+        {status.confluence.connected
+          ? 'The Onveris contracts macro and links to documentation pages work.'
+          : 'Optional. To use the contracts macro and documentation page links, connect Onveris to Confluence in Atlassian Administration under Apps.'}
+      </StatusRow>
+      <StatusRow
+        label="Teamwork Graph"
+        appearance={connected ? 'success' : 'default'}
+        state={connected ? 'Connected' : 'Not connected'}
+      >
+        {connected
+          ? `Contracts were sent to the graph when the connection was made, ${timeAgo(status.connector.at)}.`
+          : 'Optional. Connect Onveris in Atlassian Administration under Apps to make contracts findable in Rovo search.'}
+      </StatusRow>
+      <StatusRow label="Rovo">
+        The Onveris agent appears in Rovo Chat on sites that have Rovo. Everything else in Onveris works without it.
+      </StatusRow>
+      <Text color="color.text.subtle">Tested {timeAgo(status.checkedAt)}.</Text>
+    </Stack>
+  );
+};
 
 const Settings = () => {
   const [settings, setSettings] = useState(null);
@@ -106,6 +268,8 @@ const Settings = () => {
           Save
         </LoadingButton>
       </Box>
+
+      <SystemStatus />
 
       <Stack space="space.100">
         <Heading as="h2">What leaves Atlassian</Heading>
