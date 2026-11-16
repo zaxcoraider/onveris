@@ -33,7 +33,7 @@ No blockchain knowledge is needed to see the risk: it is an unapproved change to
 | **Closes the loop** | Link a change to the issue that explains it, or acknowledge it with a note. The record updates, the change goes into the contract's history, and Onveris comments on and closes its issue. |
 | **Shows it in context** | A panel on any Jira issue shows the live state of the contracts it concerns, and lets you reconcile their open changes right there: "this issue explains it", link another issue, or acknowledge. |
 | **Keeps docs live** | A Confluence macro puts a live table of the registered contracts on any page, filtered by chain and status, so deployment pages never go stale. |
-| **Answers questions** | A Rovo agent answers "has anything changed this week?" from the registry, and the same tools are available to other AI agents over the Atlassian MCP server. |
+| **Answers questions** | A Rovo agent answers "has anything changed this week?" from the registry, and the same tools are available to other AI agents over the Atlassian MCP server. An open [skill file](skills/onveris/SKILL.md) teaches any agent how to set them up and use them. |
 
 ### Built not to cry wolf
 
@@ -82,7 +82,7 @@ Atlassian Forge, UI Kit, Forge key-value storage, scheduled triggers, Jira REST 
 
 ## In this repository
 
-This repository is the Forge app itself: [`manifest.yml`](manifest.yml), [`src/`](src/) and [`test/`](test/). [DEVELOPMENT.md](DEVELOPMENT.md) covers setup, modules, permissions, tests and the code layout.
+This repository is the Forge app itself: [`manifest.yml`](manifest.yml), [`src/`](src/) and [`test/`](test/), plus [`skills/onveris/SKILL.md`](skills/onveris/SKILL.md) for third-party AI agents. [DEVELOPMENT.md](DEVELOPMENT.md) covers setup, modules, permissions, tests and the code layout.
 
 ## Status
 

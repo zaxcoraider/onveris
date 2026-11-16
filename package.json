@@ -5,7 +5,7 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "lint": "eslint src test",
+    "lint": "eslint --ext .js,.jsx src test",
     "test": "node --experimental-test-module-mocks --test"
   },
   "devDependencies": {

@@ -606,6 +606,7 @@ const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
   const [error, setError] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [changes, setChanges] = useState(null);
+  const [changesError, setChangesError] = useState(null);
   const [editing, setEditing] = useState(null);
   const [reconciling, setReconciling] = useState(null);
   const [linksVersion, setLinksVersion] = useState(0);
@@ -617,12 +618,16 @@ const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
     setLinksVersion((version) => version + 1);
   };
 
-  useEffect(() => {
-    call('getContractChanges', { id: contract.id }).then((result) => {
-      if (result.ok) setChanges(result.changes);
-      else setError(result.message);
-    });
+  const loadChanges = useCallback(async () => {
+    setChangesError(null);
+    const result = await call('getContractChanges', { id: contract.id });
+    if (result.ok) setChanges(result.changes);
+    else setChangesError(result.message);
   }, [contract.id]);
+
+  useEffect(() => {
+    loadChanges();
+  }, [loadChanges]);
 
   const check = async () => {
     setChecking(true);
@@ -753,7 +758,17 @@ const ContractDetail = ({ contract, fields, onBack, onUpdated, onRemoved }) => {
 
       <Stack space="space.100">
         <Heading as="h2">History</Heading>
-        {!changes && <Spinner size="small" label="Loading history" />}
+        {!changes && !changesError && <Spinner size="small" label="Loading history" />}
+        {!changes && changesError && (
+          <SectionMessage appearance="error" title="Couldn't load the changes for this contract">
+            <Stack space="space.100">
+              <Text>{changesError} Open changes and history are not shown until they load.</Text>
+              <Box>
+                <Button onClick={loadChanges}>Retry</Button>
+              </Box>
+            </Stack>
+          </SectionMessage>
+        )}
         {changes && changes.history.length === 0 && (
           <Text>No changes have been reconciled yet. Each change Onveris detects is kept here with what explained it.</Text>
         )}

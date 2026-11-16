@@ -252,6 +252,12 @@ const Settings = () => {
         </SectionMessage>
       )}
 
+      {settings.projects.length === 0 && (
+        <SectionMessage appearance="warning" title="No projects to choose from">
+          <Text>You can't see any Jira projects. Create a project, or ask for access to one, then reload this page.</Text>
+        </SectionMessage>
+      )}
+
       <Box xcss={pickerBox}>
         <Label labelFor="drift-project">Project</Label>
         <Select
