@@ -14,14 +14,14 @@
 </p>
 
 <p align="center">
-  <img alt="Atlassian Forge" src="https://img.shields.io/badge/Atlassian-Forge-0C66E4?style=flat-square&labelColor=0C2A4D">
-  <img alt="Jira + Confluence" src="https://img.shields.io/badge/Jira_%2B_Confluence-one_app-E9F2FF?style=flat-square&labelColor=0C2A4D">
-  <img alt="Rovo agent" src="https://img.shields.io/badge/Rovo-agent-E9F2FF?style=flat-square&labelColor=0C2A4D">
-  <img alt="Rovo MCP: 4 tools" src="https://img.shields.io/badge/Rovo_MCP-4_tools-E9F2FF?style=flat-square&labelColor=0C2A4D">
-  <img alt="Teamwork Graph connector" src="https://img.shields.io/badge/Teamwork_Graph-connector-E9F2FF?style=flat-square&labelColor=0C2A4D">
-  <img alt="6 EVM chains" src="https://img.shields.io/badge/Chains-6_EVM-4FD1A5?style=flat-square&labelColor=0C2A4D">
-  <img alt="Read-only" src="https://img.shields.io/badge/Read--only-no_keys,_no_wallet-4FD1A5?style=flat-square&labelColor=0C2A4D">
-  <img alt="112 tests" src="https://img.shields.io/badge/Tests-112_passing-E9F2FF?style=flat-square&labelColor=0C2A4D">
+  <a href="https://developer.atlassian.com/platform/forge/"><img alt="Atlassian Forge" src="https://img.shields.io/badge/Atlassian-Forge-0C66E4?style=flat-square&labelColor=0C2A4D"></a>
+  <a href="#-built-on-atlassian"><img alt="Jira + Confluence" src="https://img.shields.io/badge/Jira_%2B_Confluence-one_app-E9F2FF?style=flat-square&labelColor=0C2A4D"></a>
+  <a href="#-built-on-atlassian"><img alt="Rovo agent" src="https://img.shields.io/badge/Rovo-agent-E9F2FF?style=flat-square&labelColor=0C2A4D"></a>
+  <a href="skills/onveris/SKILL.md"><img alt="Rovo MCP: 4 tools" src="https://img.shields.io/badge/Rovo_MCP-4_tools-E9F2FF?style=flat-square&labelColor=0C2A4D"></a>
+  <a href="#-built-on-atlassian"><img alt="Teamwork Graph connector" src="https://img.shields.io/badge/Teamwork_Graph-connector-E9F2FF?style=flat-square&labelColor=0C2A4D"></a>
+  <a href="#%EF%B8%8F-how-it-works"><img alt="6 EVM chains" src="https://img.shields.io/badge/Chains-6_EVM-4FD1A5?style=flat-square&labelColor=0C2A4D"></a>
+  <a href="#-privacy-and-limits"><img alt="Read-only" src="https://img.shields.io/badge/Read--only-no_keys,_no_wallet-4FD1A5?style=flat-square&labelColor=0C2A4D"></a>
+  <a href="#-proof"><img alt="112 tests" src="https://img.shields.io/badge/Tests-112_passing-E9F2FF?style=flat-square&labelColor=0C2A4D"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/License-MIT-E9F2FF?style=flat-square&labelColor=0C2A4D"></a>
 </p>
 
