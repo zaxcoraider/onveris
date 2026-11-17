@@ -13,6 +13,8 @@ import { getConnection, saveConnection, forgetConnection } from '../storage/conn
 export const MAX_OBJECTS_PER_REQUEST = 100;
 export const SYNC_MINUTES = 30;
 const OBJECT_TYPE = 'atlassian:document';
+// Shown next to each contract in Rovo Search. A public address, because search fetches it itself.
+export const ICON_URL = 'https://raw.githubusercontent.com/zaxcoraider/onveris/main/static/icons/onveris-light.png';
 
 const STATUS_WORDS = { in_sync: 'in sync with its record', drift: 'differs from its record', unreachable: 'unreachable at the last check' };
 
@@ -43,7 +45,7 @@ function toGraphObject(contract, sequence) {
     // Everything here is public blockchain data, so it is visible to everyone on the site.
     permissions: [{ accessControls: [{ principals: [{ type: 'EVERYONE' }] }] }],
     [OBJECT_TYPE]: {
-      type: { category: 'OTHER', mimeType: 'text/plain' },
+      type: { category: 'OTHER', mimeType: 'text/plain', iconUrl: ICON_URL },
       content: { mimeType: 'text/plain', text: lines.join('\n') },
     },
   };

@@ -173,8 +173,9 @@ modules:
         syncFidelity: mirror
         supportsIncrementalSync: false
       icons:
-        light: resource:icons;onveris-light.png
-        dark: resource:icons;onveris-dark.png
+        # Public addresses: Rovo Search did not show the icons when they came from the app's resources.
+        light: https://raw.githubusercontent.com/zaxcoraider/onveris/main/static/icons/onveris-light.png
+        dark: https://raw.githubusercontent.com/zaxcoraider/onveris/main/static/icons/onveris-dark.png
       objectTypes:
         - atlassian:document
       orchestration:
