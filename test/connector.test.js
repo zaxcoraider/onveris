@@ -33,7 +33,10 @@ mock.module('@forge/teamwork-graph', {
     },
   },
 });
-mock.module('../src/services/registry.js', { namedExports: { getRegistry: async () => ({ contracts }) } });
+mock.module('../src/services/registry.js', {
+  namedExports: { describeContract: ({ linkedIssues, ...contract }) => ({ ...contract, linkedIssueCount: (linkedIssues || []).length }) },
+});
+mock.module('../src/storage/contracts.js', { namedExports: { listContracts: async () => contracts } });
 mock.module('../src/storage/status.js', {
   namedExports: { recordConnectorEvent: async () => {}, recordConnectorSync: async (result) => calls.synced.push(result) },
 });
@@ -45,7 +48,7 @@ mock.module('../src/storage/connector.js', {
   },
 });
 
-const { onConnectionChangeHandler, taskRunnerHandler, syncRegistry, displayName, SYNC_MINUTES } = await import('../src/connector/index.js');
+const { onConnectionChangeHandler, taskRunnerHandler, syncRegistry, displayName, toGraphObject, SYNC_MINUTES } = await import('../src/connector/index.js');
 
 const contract = (n) => ({
   id: `ethereum:0x${String(n).padStart(40, '0')}`,
@@ -203,4 +206,19 @@ test('the search title names the chain only when the contract name does not', ()
   assert.equal(displayName({ name: 'Sample: stablecoin on Base', chainName: 'Base' }), 'Sample: stablecoin on Base');
   assert.equal(displayName({ name: 'Sample: stablecoin on Arbitrum', chainName: 'Arbitrum One' }), 'Sample: stablecoin on Arbitrum');
   assert.equal(displayName({ name: 'Treasury', chainName: 'Ethereum' }), 'Treasury (Ethereum)');
+});
+
+test('each contract carries the ids of its linked Jira issues, and never their keys', () => {
+  const object = toGraphObject(
+    { ...contract(1), linkedIssues: [{ id: '10012', key: 'OPS-7' }, { id: '10013', key: 'OPS-8' }, { id: '10012', key: 'OPS-7' }] },
+    1_800_000_000
+  );
+  assert.deepEqual(object.associations.set, [{ associationType: 'issueIdOrKeys', values: ['10012', '10013'] }]);
+  assert.equal(object.associations.updateSequenceNumber, 1_800_000_000);
+  assert.ok(!JSON.stringify(object).includes('OPS-7'));
+});
+
+test('a contract with no linked issues sends an empty list, so old links are cleared', () => {
+  const object = toGraphObject(contract(2), 1_800_000_000);
+  assert.deepEqual(object.associations.set, [{ associationType: 'issueIdOrKeys', values: [] }]);
 });

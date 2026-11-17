@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { graph, types } from '@forge/teamwork-graph';
-import { getRegistry } from '../services/registry.js';
+import { describeContract } from '../services/registry.js';
+import { listContracts } from '../storage/contracts.js';
 import { recordConnectorEvent, recordConnectorSync } from '../storage/status.js';
 import { getConnection, saveConnection, forgetConnection } from '../storage/connector.js';
 
@@ -9,6 +10,10 @@ import { getConnection, saveConnection, forgetConnection } from '../storage/conn
 // recurring task sends the registry again every SYNC_MINUTES, and removes from the graph any
 // contract that is no longer registered. The values are those from Onveris's last check, so
 // syncing reads nothing from the chain.
+//
+// Each contract also carries the Jira issues linked to it, so the graph joins the chain record
+// to the work that explains it. Only issue ids are sent, never keys or titles: Teamwork Graph
+// matches them to the real issues, and Jira's own permissions decide who can see those.
 
 export const MAX_OBJECTS_PER_REQUEST = 100;
 export const SYNC_MINUTES = 30;
@@ -18,7 +23,11 @@ export const ICON_URL = 'https://raw.githubusercontent.com/zaxcoraider/onveris/m
 
 const STATUS_WORDS = { in_sync: 'in sync with its record', drift: 'differs from its record', unreachable: 'unreachable at the last check' };
 
-function toGraphObject(contract, sequence) {
+// The Jira issue ids linked to a contract, at most 500 (the graph's limit per object).
+export const linkedIssueIds = (stored) => [...new Set((stored.linkedIssues || []).map((link) => String(link.id)))].slice(0, 500);
+
+export function toGraphObject(stored, sequence) {
+  const contract = describeContract(stored);
   const { observed } = contract;
   const lines = [
     `${contract.name}: smart contract on ${contract.chainName}, registered in Onveris.`,
@@ -44,6 +53,12 @@ function toGraphObject(contract, sequence) {
     lastUpdatedAt: contract.lastCheckedAt || contract.createdAt,
     // Everything here is public blockchain data, so it is visible to everyone on the site.
     permissions: [{ accessControls: [{ principals: [{ type: 'EVERYONE' }] }] }],
+    // Always sent, empty when nothing is linked, so an unlinked issue is dropped from the graph.
+    associations: {
+      updateSequenceNumber: sequence,
+      lastUpdatedAt: new Date(sequence * 1000).toISOString(),
+      set: [{ associationType: 'issueIdOrKeys', values: linkedIssueIds(stored) }],
+    },
     [OBJECT_TYPE]: {
       type: { category: 'OTHER', mimeType: 'text/plain', iconUrl: ICON_URL },
       content: { mimeType: 'text/plain', text: lines.join('\n') },
@@ -68,7 +83,7 @@ const inBatches = (items) => {
 // Returns the ids to remember as sent. After a failure that is everything that may now be in
 // the graph, so a later sync still removes what it should.
 export async function syncRegistry(connectionId, previousIds = []) {
-  const { contracts } = await getRegistry();
+  const contracts = await listContracts();
   const sequence = Math.floor(Date.now() / 1000);
   const ids = contracts.map((contract) => contract.id);
   const mayBeInGraph = [...new Set([...previousIds, ...ids])];
