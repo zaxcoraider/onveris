@@ -1,7 +1,7 @@
 import api, { route } from '@forge/api';
 import { CHAINS } from './chains.js';
 import { probeEndpoint } from './rpc.js';
-import { getCheckerRun, getConnectorEvent } from '../storage/status.js';
+import { getCheckerRun, getConnectorEvent, getConnectorSync } from '../storage/status.js';
 
 // What the settings page shows under "How Onveris is running". Every part answers on its own,
 // so one slow or failing part never hides the others.
@@ -36,11 +36,12 @@ async function confluenceStatus() {
 }
 
 export async function getStatus() {
-  const [chains, confluence, checker, connector] = await Promise.all([
+  const [chains, confluence, checker, connector, connectorSync] = await Promise.all([
     chainStatus(),
     confluenceStatus(),
     getCheckerRun(),
     getConnectorEvent(),
+    getConnectorSync(),
   ]);
-  return { chains, confluence, checker, connector, checkedAt: new Date().toISOString() };
+  return { chains, confluence, checker, connector, connectorSync, checkedAt: new Date().toISOString() };
 }

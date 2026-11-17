@@ -39,6 +39,7 @@ modules:
   rovo:agent:
     - key: onveris-agent
       name: Onveris
+      icon: resource:icons;onveris-agent.png
       description: Answers questions about your team's registered smart contracts and what changed on chain.
       prompt: |
         You are Onveris, an assistant for teams that build and operate smart contracts.
@@ -169,13 +170,16 @@ modules:
       name: Onveris
       capabilities:
         replicatesPermissions: false
-        syncFidelity: upsert
+        syncFidelity: mirror
         supportsIncrementalSync: false
       icons:
         light: resource:icons;onveris-light.svg
         dark: resource:icons;onveris-dark.svg
       objectTypes:
         - atlassian:document
+      orchestration:
+        taskRunner:
+          function: connectorSync
       datasource:
         onConnectionChange:
           function: onConnectionChange
@@ -189,6 +193,9 @@ modules:
       timeoutSeconds: 300
     - key: onConnectionChange
       handler: index.onConnectionChangeHandler
+    - key: connectorSync
+      handler: index.taskRunnerHandler
+      timeoutSeconds: 120
     - key: readContractAction
       handler: index.readContractAction
     - key: listContractsAction

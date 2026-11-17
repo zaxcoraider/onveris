@@ -5,6 +5,7 @@ import { kvs } from './kv.js';
 
 const CHECKER_KEY = 'status:checker';
 const CONNECTOR_KEY = 'status:connector';
+const CONNECTOR_SYNC_KEY = 'status:connector-sync';
 
 const remember = async (key, value) => {
   try {
@@ -21,3 +22,7 @@ export const getCheckerRun = async () => (await kvs.get(CHECKER_KEY)) || null;
 // The last Teamwork Graph connection event: CREATED, UPDATED or DELETED.
 export const recordConnectorEvent = (action) => remember(CONNECTOR_KEY, { action, at: new Date().toISOString() });
 export const getConnectorEvent = async () => (await kvs.get(CONNECTOR_KEY)) || null;
+
+// The last time contracts were sent to Teamwork Graph, by the connection or the recurring sync.
+export const recordConnectorSync = (result) => remember(CONNECTOR_SYNC_KEY, { ...result, at: new Date().toISOString() });
+export const getConnectorSync = async () => (await kvs.get(CONNECTOR_SYNC_KEY)) || null;

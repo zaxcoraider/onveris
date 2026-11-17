@@ -46,6 +46,14 @@ const StatusRow = ({ label, appearance, state, children }) => (
   </Stack>
 );
 
+const connectorText = (sync) => {
+  if (!sync) return 'Contracts are sent to the graph every 30 minutes. Reconnect once in Atlassian Administration to start this.';
+  const plural = (n) => `${n} contract${n === 1 ? '' : 's'}`;
+  if (!sync.ok) return `Contracts are sent every 30 minutes. The last try, ${timeAgo(sync.at)}, failed; it is tried again.`;
+  const removed = sync.removed ? `, ${plural(sync.removed)} removed` : '';
+  return `Contracts are sent every 30 minutes. Last sent ${timeAgo(sync.at)}: ${plural(sync.sent)}${removed}.`;
+};
+
 const checkerRow = (checker) => {
   if (!checker) {
     return { appearance: 'default', state: 'Not run yet', text: 'The first automatic check runs within five minutes of installing.' };
@@ -167,7 +175,7 @@ const SystemStatus = () => {
         state={connected ? 'Connected' : 'Not connected'}
       >
         {connected
-          ? `Contracts were sent to the graph when the connection was made, ${timeAgo(status.connector.at)}.`
+          ? connectorText(status.connectorSync)
           : 'Optional. Connect Onveris in Atlassian Administration under Apps to make contracts findable in Rovo search.'}
       </StatusRow>
       <StatusRow label="Rovo">

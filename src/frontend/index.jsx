@@ -1046,7 +1046,7 @@ const App = () => {
     <Stack space="space.300">
       <Inline spread="space-between" alignBlock="center">
         <Stack space="space.050">
-          <Heading as="h1">Onveris</Heading>
+          <Heading as="h1">Contract registry</Heading>
           <Text>{summaryText(registry.summary)}</Text>
         </Stack>
         <ButtonGroup>

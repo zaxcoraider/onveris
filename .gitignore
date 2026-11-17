@@ -65,3 +65,6 @@ hardhat.config.local.*
 
 # Install link for judges: goes in the Devpost form, kept local
 /install-link.txt
+
+# Logo images for the developer console and Devpost: uploaded by hand, not part of the app
+brand/
