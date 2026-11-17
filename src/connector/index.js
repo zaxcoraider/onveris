@@ -9,7 +9,9 @@ import { recordConnectorEvent } from '../storage/status.js';
 // Not yet built: sending updates when contracts are registered, removed or change. Until
 // then the graph holds the registry as it was when the connection was made.
 
-const STATUS_WORDS = { in_sync: 'in sync with its record', drift: 'differs from its record', unreachable: 'unreachable at the last check' };
+export const MAX_OBJECTS_PER_REQUEST = 100;
+
+const STATUS_WORDS ={ in_sync: 'in sync with its record', drift: 'differs from its record', unreachable: 'unreachable at the last check' };
 
 function toGraphObject(contract) {
   const { observed } = contract;
@@ -60,14 +62,20 @@ export async function onConnectionChangeHandler(request) {
     return { success: true };
   }
 
-  const response = await graph.setObjects({ connectionId, objects: contracts.map(toGraphObject) });
-  const rejected = response.results?.rejected ?? [];
-  const accepted = response.results?.accepted?.length ?? 0;
-  if (!response.success || rejected.length > 0) {
-    console.error('[connector] setObjects failed', JSON.stringify({ accepted, rejected, error: response.error }));
-    return { success: false, message: 'Teamwork Graph did not accept the contract data.' };
+  // Teamwork Graph takes at most 100 objects per request.
+  const objects = contracts.map(toGraphObject);
+  let accepted = 0;
+  for (let i = 0; i < objects.length; i += MAX_OBJECTS_PER_REQUEST) {
+    const batch = objects.slice(i, i + MAX_OBJECTS_PER_REQUEST);
+    const response = await graph.setObjects({ connectionId, objects: batch });
+    const rejected = response.results?.rejected ?? [];
+    if (!response.success || rejected.length > 0) {
+      console.error('[connector] setObjects failed', JSON.stringify({ accepted, rejected, error: response.error }));
+      return { success: false, message: 'Teamwork Graph did not accept the contract data.' };
+    }
+    accepted += response.results?.accepted?.length || batch.length;
   }
-  console.log(`[connector] ${accepted || contracts.length} accepted, 0 rejected`);
+  console.log(`[connector] ${accepted} accepted, 0 rejected`);
   await recordConnectorEvent(action);
   return { success: true };
 }
