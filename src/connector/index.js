@@ -36,7 +36,7 @@ function toGraphObject(contract, sequence) {
     id: contract.id,
     // The time of the sync, in seconds: it rises with every sync, so the latest one always wins.
     updateSequenceNumber: sequence,
-    displayName: `${contract.name} contract on ${contract.chainName}`,
+    displayName: displayName(contract),
     url: contract.explorerUrl,
     createdAt: contract.createdAt,
     lastUpdatedAt: contract.lastCheckedAt || contract.createdAt,
@@ -47,6 +47,13 @@ function toGraphObject(contract, sequence) {
       content: { mimeType: 'text/plain', text: lines.join('\n') },
     },
   };
+}
+
+// The contract's name, with its chain added only when the name does not already say it:
+// "Sample: stablecoin on Base", not "Sample: stablecoin on Base contract on Base".
+export function displayName(contract) {
+  const chainWord = contract.chainName.split(' ')[0].toLowerCase();
+  return contract.name.toLowerCase().includes(chainWord) ? contract.name : `${contract.name} (${contract.chainName})`;
 }
 
 const inBatches = (items) => {

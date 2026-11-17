@@ -45,7 +45,7 @@ mock.module('../src/storage/connector.js', {
   },
 });
 
-const { onConnectionChangeHandler, taskRunnerHandler, syncRegistry, SYNC_MINUTES } = await import('../src/connector/index.js');
+const { onConnectionChangeHandler, taskRunnerHandler, syncRegistry, displayName, SYNC_MINUTES } = await import('../src/connector/index.js');
 
 const contract = (n) => ({
   id: `ethereum:0x${String(n).padStart(40, '0')}`,
@@ -197,4 +197,10 @@ test('each sync sends a higher sequence number than any block number sent before
   contracts = [{ ...contract(1), lastBlock: 450_000_000 }];
   await syncRegistry('conn');
   assert.ok(calls.set[0].objects[0].updateSequenceNumber > 450_000_000);
+});
+
+test('the search title names the chain only when the contract name does not', () => {
+  assert.equal(displayName({ name: 'Sample: stablecoin on Base', chainName: 'Base' }), 'Sample: stablecoin on Base');
+  assert.equal(displayName({ name: 'Sample: stablecoin on Arbitrum', chainName: 'Arbitrum One' }), 'Sample: stablecoin on Arbitrum');
+  assert.equal(displayName({ name: 'Treasury', chainName: 'Ethereum' }), 'Treasury (Ethereum)');
 });

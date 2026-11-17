@@ -173,8 +173,8 @@ modules:
         syncFidelity: mirror
         supportsIncrementalSync: false
       icons:
-        light: resource:icons;onveris-light.svg
-        dark: resource:icons;onveris-dark.svg
+        light: resource:icons;onveris-light.png
+        dark: resource:icons;onveris-dark.png
       objectTypes:
         - atlassian:document
       orchestration:

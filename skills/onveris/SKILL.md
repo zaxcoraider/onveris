@@ -12,7 +12,7 @@ These tools are **read-only**. They cannot register contracts, reconcile changes
 ## Setup
 
 1. Onveris must be installed on the user's Atlassian site.
-2. A site or org admin turns on its tools: in [Atlassian Administration](https://admin.atlassian.com), open **Apps > Sites > *the site* > Connected apps**, choose **onveris**, open its app details and enable the tools under **Tools**.
+2. A site or org admin turns on its tools: in [Atlassian Administration](https://admin.atlassian.com), open **Apps > Sites > *the site* > Connected apps**, choose **onveris**, and on its **Details** tab, under **Tools** ("Expose tools to MCP-compatible apps"), select **Enable tools**.
 3. Add the remote MCP server to your client:
 
    ```
