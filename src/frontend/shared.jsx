@@ -20,7 +20,8 @@ export const CHANGE_STATUS = {
 
 export const KIND_LABEL = { proxy: 'Upgradeable proxy', plain: 'Plain contract' };
 
-export const shorten = (address) => (address ? `${address.slice(0, 6)}…${address.slice(-4)}` : '');
+// Word joiners (U+2060) around the ellipsis keep a shortened address on one line.
+export const shorten = (address) => (address ? `${address.slice(0, 6)}\u2060…\u2060${address.slice(-4)}` : '');
 
 export const timeAgo = (iso) => {
   if (!iso) return 'never';

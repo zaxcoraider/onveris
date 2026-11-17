@@ -159,12 +159,13 @@ const App = () => {
         rowsPerPage={25}
         head={{
           cells: [
-            { key: 'name', content: 'Name' },
-            { key: 'chain', content: 'Chain' },
-            { key: 'address', content: 'Address' },
-            { key: 'state', content: 'On chain now' },
-            { key: 'status', content: 'Status' },
-            { key: 'checked', content: 'Last checked' },
+            // Widths in percent, so short values stay on one line on narrow pages.
+            { key: 'name', content: 'Name', width: 24 },
+            { key: 'chain', content: 'Chain', width: 12 },
+            { key: 'address', content: 'Address', width: 17 },
+            { key: 'state', content: 'On chain now', width: 23 },
+            { key: 'status', content: 'Status', width: 11 },
+            { key: 'checked', content: 'Last checked', width: 13 },
           ],
         }}
         rows={rows}

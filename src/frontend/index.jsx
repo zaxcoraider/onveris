@@ -9,6 +9,7 @@ import ForgeReconciler, {
   Inline,
   Label,
   Link,
+  LinkButton,
   LoadingButton,
   Lozenge,
   Modal,
@@ -23,10 +24,17 @@ import ForgeReconciler, {
   Stack,
   Text,
   Textfield,
+  Tooltip,
   xcss,
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 import { CHANGE_STATUS, KIND_LABEL, STATUS, StatusLozenge, call, shorten, timeAgo } from './shared.jsx';
+
+// What each kind means, for readers new to smart contracts.
+const KIND_HELP = {
+  proxy: 'Upgradeable proxy: its code can be swapped, so Onveris also watches who is allowed to swap it.',
+  plain: 'Plain contract: its code cannot be changed. Onveris watches its code and its owner.',
+};
 
 const filterBox = xcss({ width: '220px' });
 const pageLinkBox = xcss({ width: '360px' });
@@ -83,7 +91,11 @@ const RegisterModal = ({ chains, fields, onClose, onRegistered }) => {
             </Text>
             {errorMessage}
             <Stack space="space.050">
-              <Text weight="bold">{KIND_LABEL[preview.kind] || 'Contract'}</Text>
+              <Text weight="bold">Type</Text>
+              <Text>{KIND_HELP[preview.kind] || KIND_LABEL[preview.kind] || 'Contract'}</Text>
+            </Stack>
+            <Stack space="space.050">
+              <Text weight="bold">Address</Text>
               <Text>{preview.address}</Text>
             </Stack>
             {found.map(({ key, label }) => (
@@ -605,6 +617,18 @@ const historyRows = (history) =>
     };
   });
 
+// Code fingerprints are 66 characters: shown shortened, with the full value on hover, so the
+// record-versus-chain table fits the page. Addresses (42 characters) are shown in full.
+const ChainValue = ({ value }) => {
+  if (!value) return <Text>None</Text>;
+  if (value.length <= 42) return <Text>{value}</Text>;
+  return (
+    <Tooltip content={value}>
+      <Text>{`${value.slice(0, 10)}…${value.slice(-8)}`}</Text>
+    </Tooltip>
+  );
+};
+
 const ContractDetail = ({ contract, fields, canManage, onBack, onUpdated, onRemoved }) => {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState(null);
@@ -652,8 +676,8 @@ const ContractDetail = ({ contract, fields, canManage, onBack, onUpdated, onRemo
         key,
         cells: [
           { key: 'field', content: <Text>{label}</Text> },
-          { key: 'recorded', content: <Text>{recorded || 'None'}</Text> },
-          { key: 'chain', content: <Text>{onChain || 'None'}</Text> },
+          { key: 'recorded', content: <ChainValue value={recorded} /> },
+          { key: 'chain', content: <ChainValue value={onChain} /> },
           {
             key: 'match',
             content: <Lozenge appearance={matches ? 'success' : 'removed'}>{matches ? 'Matches' : 'Differs'}</Lozenge>,
@@ -694,9 +718,9 @@ const ContractDetail = ({ contract, fields, canManage, onBack, onUpdated, onRemo
         </Stack>
         <ButtonGroup>
           {contract.explorerUrl && (
-            <Link href={contract.explorerUrl} openNewTab>
+            <LinkButton href={contract.explorerUrl} target="_blank" appearance="subtle">
               View on explorer
-            </Link>
+            </LinkButton>
           )}
           <LoadingButton onClick={check} isLoading={checking}>
             Check now
@@ -872,6 +896,17 @@ const App = () => {
     load();
   }, [load]);
 
+  // The checker updates contracts every five minutes; keep what is on screen from going stale.
+  useEffect(() => {
+    const timer = setInterval(load, 60 * 1000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  const openContract = (id) => {
+    setSelectedId(id);
+    load();
+  };
+
   const checkAll = async () => {
     setCheckingAll(true);
     setNotice(null);
@@ -946,7 +981,10 @@ const App = () => {
         contract={selected}
         fields={setup.fields}
         canManage={setup.canManage}
-        onBack={() => setSelectedId(null)}
+        onBack={() => {
+          setSelectedId(null);
+          load();
+        }}
         onUpdated={replaceContract}
         onRemoved={() => {
           setSelectedId(null);
@@ -1030,7 +1068,7 @@ const App = () => {
       {
         key: 'name',
         content: (
-          <Button appearance="subtle" onClick={() => setSelectedId(contract.id)}>
+          <Button appearance="subtle" onClick={() => openContract(contract.id)}>
             {contract.name}
           </Button>
         ),
@@ -1076,7 +1114,7 @@ const App = () => {
         <SectionMessage appearance="information" title="Changes are not raising Jira issues yet">
           <Text>
             Onveris detects changes and shows them here. To also get a Jira issue for each unrecorded change, a Jira
-            admin chooses a project under Jira settings, Apps, Onveris.
+            admin chooses a project under Settings (⚙️) &gt; Jira apps &gt; Onveris.
           </Text>
         </SectionMessage>
       )}

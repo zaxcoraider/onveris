@@ -21,17 +21,22 @@ const pickerBox = xcss({ width: '360px' });
 
 const LATE_AFTER_MS = 15 * 60 * 1000;
 
+// Room above and below each endpoint, so every chain's row reads as one block.
+const cellBox = xcss({ paddingBlock: 'space.150' });
+
 const EndpointCell = ({ endpoint }) =>
   endpoint ? (
-    <Stack space="space.050">
-      <Inline space="space.100" alignBlock="center">
-        <Lozenge appearance={endpoint.ok ? 'success' : 'removed'}>{endpoint.ok ? 'Working' : 'Not responding'}</Lozenge>
-        <Text>{endpoint.host}</Text>
-      </Inline>
-      <Text color="color.text.subtle">
-        {endpoint.ok ? `Block ${endpoint.block.toLocaleString('en-US')} · ${endpoint.ms} ms` : endpoint.reason}
-      </Text>
-    </Stack>
+    <Box xcss={cellBox}>
+      <Stack space="space.050">
+        <Inline space="space.100" alignBlock="center">
+          <Lozenge appearance={endpoint.ok ? 'success' : 'removed'}>{endpoint.ok ? 'Working' : 'Not responding'}</Lozenge>
+          <Text>{endpoint.host}</Text>
+        </Inline>
+        <Text color="color.text.subtle">
+          {endpoint.ok ? `Block ${endpoint.block.toLocaleString('en-US')} · ${endpoint.ms} ms` : endpoint.reason}
+        </Text>
+      </Stack>
+    </Box>
   ) : (
     <Text color="color.text.subtle">None</Text>
   );
@@ -60,7 +65,7 @@ const checkerRow = (checker) => {
   }
   const { checked = 0, unreachable = 0, drift = 0 } = checker.summary || {};
   const parts = [`${checked} ${checked === 1 ? 'contract' : 'contracts'} checked`];
-  if (drift) parts.push(`${drift} changed on the chain`);
+  if (drift) parts.push(`${drift} not matching ${drift === 1 ? 'its' : 'their'} record`);
   if (unreachable) parts.push(`${unreachable} unreachable`);
   if (Date.now() - new Date(checker.at).getTime() > LATE_AFTER_MS) {
     return {
