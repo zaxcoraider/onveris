@@ -167,7 +167,7 @@ You need a Jira Cloud site where you are a Jira admin. Confluence on the same si
 3. **Choose where issues go.** Open **Settings (⚙️) > Jira apps** and choose **Onveris** under **Apps** on the left. Pick a project and save. **How Onveris is running** tests every chain endpoint live.
 4. **Cause a change.** Open any sample contract, choose **Edit record** on the *Proxy admin* row, change the last character and choose **Save and check**. Editing the record is exactly what the chain changing under you looks like: Onveris shows **Drift**, records the change and opens a Jira issue.
 5. **Reconcile it.** Choose **Acknowledge**, add a note and confirm. The contract is back *In sync*, the change is in **History**, and the Jira issue gets a comment and is closed.
-6. **Work from an issue.** Open any Jira issue, choose **Onveris** in the row of buttons under the title, and link a contract.
+6. **Work from an issue.** Open any Jira issue. In the row of small icon buttons under the title, choose the Onveris one (it has no label; hover to see its name), and link a contract.
    - **Reconcile from the issue:** repeat step 4. The panel lists the open change; choose **… explains it**.
    - **Plan ahead:** choose **Declare change**, pick **Proxy admin**, then repeat step 4. The change is recognised as planned and no issue is raised.
 7. **Confluence** (optional). Connect Onveris to Confluence: [Atlassian Administration](https://admin.atlassian.com) > **Apps** > your site > **Connected apps** > **onveris** > **Connections** > connect **Confluence**. Then edit any page, type `/Onveris contracts` and publish.
