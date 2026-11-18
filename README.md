@@ -151,6 +151,7 @@ flowchart LR
 | Claim | Evidence |
 |---|---|
 | A real, unplanned upgrade was caught and raised in Jira | On Sepolia, a test proxy was upgraded from V1 to V2 with no ticket ([tx 0x54e4…5ca3](https://sepolia.etherscan.io/tx/0x54e4bf7165905c185e18d8924639acd75fb6e178d12a60ca3c6ef6071e535ca3)). Onveris recorded the change with that transaction and raised a Jira issue, which closed itself when the change was acknowledged. 16 Nov 2026 |
+| A judge's install works from scratch | On a clean site, using the public install link, every step of the judge's guide passed, including the Confluence fallback and a change caught before any project was set. 18 Nov 2026 |
 | The automatic check runs reliably | Every five minutes, all registered contracts checked with no failures, in the logs reviewed on 17 Nov 2026 |
 | The MCP tools work from outside Atlassian | All four tools called from Claude Code against the live site, 17 Nov 2026 |
 | Contracts are findable in Rovo Search | Searching *stablecoin* lists the samples under the Onveris source, with its logo ([screenshot](#-see-it-in-5-minutes)) |
@@ -164,7 +165,7 @@ You need a Jira Cloud site where you are a Jira admin. Confluence on the same si
 
 1. **Install** Onveris in Jira from the install link in the Devpost submission.
 2. **Load samples.** Open **Apps > Onveris** and choose **Load sample contracts**. Eight well-known public contracts on five chains are read live and appear *In sync*.
-3. **Choose where issues go.** Open **Settings (⚙️) > Jira apps** and choose **Onveris** under **Apps** on the left. Pick a project and save. **How Onveris is running** tests every chain endpoint live.
+3. **Choose where issues go.** Open **Settings (⚙️) > Jira apps** and choose **Onveris** under **Apps** on the left. Pick a project and save. **How Onveris is running** tests every chain endpoint live. If you skip this, nothing is lost: a change found earlier gets its issue as soon as you pick a project.
 4. **Cause a change.** Open any sample contract, choose **Edit record** on the *Proxy admin* row, change the last character and choose **Save and check**. Editing the record is exactly what the chain changing under you looks like: Onveris shows **Drift**, records the change and opens a Jira issue.
 5. **Reconcile it.** Choose **Acknowledge**, add a note and confirm. The contract is back *In sync*, the change is in **History**, and the Jira issue gets a comment and is closed.
 6. **Work from an issue.** Open any Jira issue. In the row of small icon buttons under the title, choose the Onveris one (it has no label; hover to see its name), and link a contract.
@@ -238,4 +239,4 @@ forge install     # pick your Jira site
 
 ## 📄 License
 
-[MIT](LICENSE). Built for Codegeist 2026 · Category: Apps for Specialized Industries · Bonus prizes: Rovo agents, Atlassian MCP, Teamwork Graph.
+[MIT](LICENSE). Built for Codegeist 2026 · Category: Apps for Specialized Industries · Bonus prize entered: Teamwork Graph · also built for Rovo agents and Atlassian MCP.
