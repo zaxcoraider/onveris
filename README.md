@@ -7,6 +7,7 @@
 <h3 align="center">One stolen key can quietly swap the code of a smart contract that holds millions.<br>Onveris watches your team's contracts on the blockchain, and when one changes<br>with no Jira ticket to explain it, Onveris raises the issue within minutes.</h3>
 
 <p align="center">
+  <a href="https://youtu.be/lSi9R7HcfF0"><img alt="Watch the demo" src="https://img.shields.io/badge/▶️_Watch_the_demo-YouTube-FF5A4D?style=for-the-badge&labelColor=0C2A4D"></a>
   <a href="#-try-it-on-your-site"><img alt="Judge's guide" src="https://img.shields.io/badge/🧭_Judge's_guide-10_minutes-4FD1A5?style=for-the-badge&labelColor=0C2A4D"></a>
   <a href="#-see-it-in-5-minutes"><img alt="See it" src="https://img.shields.io/badge/📸_See_it-5_screens-E9F2FF?style=for-the-badge&labelColor=0C2A4D"></a>
   <a href="#-proof"><img alt="Proof" src="https://img.shields.io/badge/🧾_Proof-real_upgrade_caught-E9F2FF?style=for-the-badge&labelColor=0C2A4D"></a>
@@ -61,6 +62,10 @@
 <p align="center"><sub>Measured on the development site, 16–17 Nov 2026. The real upgrade behind the second number is in <a href="#-proof">Proof</a>.</sub></p>
 
 ## 📸 See it in 5 minutes
+
+**▶️ Or watch it:** the whole loop in under two minutes, from a change on chain to a Jira issue, a planned change, Confluence and Rovo.
+
+<p align="center"><a href="https://youtu.be/lSi9R7HcfF0"><img src="https://img.youtube.com/vi/lSi9R7HcfF0/hqdefault.jpg" alt="Onveris demo video on YouTube" width="60%"></a></p>
 
 **1 · The issue nobody had to write.** A contract changed on chain and no ticket announced it, so Onveris raised one: what changed, recorded versus on-chain values, the contract, when it was detected, and exactly what to do. Labelled `onveris-drift` and reported by the Onveris app itself.
 
